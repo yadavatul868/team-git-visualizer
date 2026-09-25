@@ -27,9 +27,41 @@ class RepoSnapshot(BaseModel):
     branches: list[BranchInfo]
 
 
+class PersonRef(BaseModel):
+    """One real person, however many git identities they used."""
+
+    key: str
+    name: str
+    login: str | None
+
+
+class Identity(BaseModel):
+    name: str
+    email: str
+    commit_count: int
+
+
+class Person(PersonRef):
+    commit_count: int
+    manually_linked: bool
+    identities: list[Identity]
+
+
+class LinkRequest(BaseModel):
+    repo: str
+    email: str
+    target_email: str
+
+
+class UnlinkRequest(BaseModel):
+    repo: str
+    key: str
+
+
 class CommitRef(BaseModel):
     sha: str
     short_sha: str
+    author: PersonRef
     author_name: str
     author_email: str
     authored_at: str
@@ -49,7 +81,7 @@ class GraphNode(BaseModel):
     short_sha: str
     lane: int
     x: int
-    author_index: int
+    author: PersonRef
     author_name: str
     author_email: str
     authored_at: str
@@ -68,9 +100,7 @@ class GraphEdge(BaseModel):
     parent_index: int
 
 
-class AuthorStat(BaseModel):
-    name: str
-    email: str
+class AuthorStat(PersonRef):
     commit_count: int
 
 
@@ -105,6 +135,7 @@ class FileChange(BaseModel):
 class CommitDetails(BaseModel):
     sha: str
     short_sha: str
+    author: PersonRef
     author_name: str
     author_email: str
     authored_at: str
@@ -128,8 +159,7 @@ class EdgeDetails(BaseModel):
     parent_index: int
     is_merge: bool
     time_gap_seconds: int
-    merged_by_name: str | None
-    merged_by_email: str | None
+    merged_by: PersonRef | None
     merged_branch: str | None
     pr_number: int | None
     commits_brought_in: int | None

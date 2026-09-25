@@ -883,3 +883,88 @@ code,
   color: var(--text-primary);
   font-size: 22px;
 }
+
+/* ---------- People dialog ---------- */
+.people-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(80vh, 760px);
+  padding: 0 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: var(--shadow);
+}
+.people-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+.dialog-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  padding: 16px 0 8px;
+  background: var(--surface-raised);
+}
+.dialog-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.dialog-intro {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.people-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.person-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid var(--gridline);
+}
+.person-main {
+  min-width: 0;
+}
+.identity-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.person-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.person-actions select {
+  height: 28px;
+  max-width: 190px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+.button.small {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.identity-used {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .person-row {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+  .person-actions {
+    grid-column: 2;
+    align-items: flex-start;
+  }
+}

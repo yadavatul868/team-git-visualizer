@@ -3,7 +3,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { api } from '../api'
 import { authorColor, type AuthorSlots } from '../lib/colors'
 import { formatDuration, formatFull, initials, relativeTime } from '../lib/format'
-import type { CommitDetails, CommitRef, EdgeDetails, EdgeKind, Graph, Selection } from '../types'
+import type { CommitDetails, CommitRef, EdgeDetails, EdgeKind, Graph, PersonRef, Selection } from '../types'
 import { FileList } from './FileList'
 
 interface DetailsPanelProps {
@@ -106,7 +106,12 @@ function CommitView({
       <dl className="facts">
         <dt>Author</dt>
         <dd>
-          <Person name={details.author_name} email={details.author_email} slots={slots} />
+          <Person
+            person={details.author}
+            rawName={details.author_name}
+            rawEmail={details.author_email}
+            slots={slots}
+          />
         </dd>
         <dt>When</dt>
         <dd>
@@ -242,7 +247,14 @@ function EdgeView({
         <dl className="facts">
           <dt>Merged by</dt>
           <dd>
-            <Person name={details.merged_by_name ?? ''} email={details.merged_by_email ?? ''} slots={slots} />
+            {details.merged_by && (
+              <Person
+                person={details.merged_by}
+                rawName={details.target.author_name}
+                rawEmail={details.target.author_email}
+                slots={slots}
+              />
+            )}
           </dd>
           {details.pr_number !== null && (
             <>
@@ -301,11 +313,11 @@ function EdgeEnd({
   return (
     <button type="button" className="edge-end" onClick={() => onSelect(commit.sha)}>
       <span className="edge-end-label">{label}</span>
-      <AuthorDot name={commit.author_name} email={commit.author_email} slots={slots} />
+      <AuthorDot person={commit.author} slots={slots} />
       <span className="edge-end-text">
         <span className="mono">{commit.short_sha}</span> {commit.subject}
         <span className="muted">
-          {commit.author_name} · {formatFull(commit.committed_at)}
+          {commit.author.name} · {formatFull(commit.committed_at)}
         </span>
       </span>
     </button>
@@ -325,26 +337,43 @@ function CommitLink({
 }) {
   return (
     <button type="button" className="commit-link" onClick={() => onSelect(commit.sha)} title={commit.subject}>
-      {showAuthor && slots && <AuthorDot name={commit.author_name} email={commit.author_email} slots={slots} />}
+      {showAuthor && slots && <AuthorDot person={commit.author} slots={slots} />}
       <span className="mono">{commit.short_sha}</span>
       <span className="commit-link-subject">{commit.subject}</span>
     </button>
   )
 }
 
-function Person({ name, email, slots }: { name: string; email: string; slots: AuthorSlots }) {
+/** The resolved person, plus the raw git identity they used for this commit. */
+function Person({
+  person,
+  rawName,
+  rawEmail,
+  slots,
+}: {
+  person: PersonRef
+  rawName: string
+  rawEmail: string
+  slots: AuthorSlots
+}) {
   return (
     <span className="person">
-      <AuthorDot name={name} email={email} slots={slots} />
-      {name} <span className="muted">&lt;{email}&gt;</span>
+      <AuthorDot person={person} slots={slots} />
+      <span>
+        {person.name}
+        {person.login && <span className="muted"> @{person.login}</span>}
+      </span>
+      <span className="muted identity-used" title="The git identity on this commit">
+        as {rawName === person.name ? '' : `${rawName} `}&lt;{rawEmail}&gt;
+      </span>
     </span>
   )
 }
 
-function AuthorDot({ name, email, slots }: { name: string; email: string; slots: AuthorSlots }) {
+function AuthorDot({ person, slots }: { person: PersonRef; slots: AuthorSlots }) {
   return (
-    <span className="chip-dot" style={{ '--node-color': authorColor(slots, email) } as CSSProperties} aria-hidden>
-      {initials(name)}
+    <span className="chip-dot" style={{ '--node-color': authorColor(slots, person.key) } as CSSProperties} aria-hidden>
+      {initials(person.name)}
     </span>
   )
 }

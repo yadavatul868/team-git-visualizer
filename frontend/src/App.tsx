@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import { DetailsPanel } from './components/DetailsPanel'
 import { GraphPanel } from './components/GraphPanel'
+import { PeopleDialog } from './components/PeopleDialog'
 import { SummaryStrip } from './components/SummaryStrip'
 import { TopBar } from './components/TopBar'
 import { assignAuthorSlots } from './lib/colors'
@@ -39,6 +40,7 @@ export default function App() {
   const [focusSha, setFocusSha] = useState<string | null>(null)
   const [highlightedAuthor, setHighlightedAuthor] = useState<string | null>(null)
   const [graphVersion, setGraphVersion] = useState(0)
+  const [peopleOpen, setPeopleOpen] = useState(false)
 
   useEffect(() => {
     api
@@ -93,7 +95,7 @@ export default function App() {
   }
 
   const slots = useMemo(
-    () => (graph ? assignAuthorSlots(graph.repo, graph.authors.map((author) => author.email)) : {}),
+    () => (graph ? assignAuthorSlots(graph.repo, graph.authors.map((author) => author.key)) : {}),
     [graph],
   )
 
@@ -145,8 +147,20 @@ export default function App() {
           slots={slots}
           highlightedAuthor={highlightedAuthor}
           onHighlightAuthor={setHighlightedAuthor}
+          onManagePeople={() => setPeopleOpen(true)}
         />
       ) : null}
+      {peopleOpen && graph && (
+        <PeopleDialog
+          repo={graph.repo}
+          slots={slots}
+          onClose={() => setPeopleOpen(false)}
+          onChanged={() => {
+            setHighlightedAuthor(null)
+            setGraphVersion((version) => version + 1)
+          }}
+        />
+      )}
 
       <main className={`workspace${loadingGraph ? ' is-loading' : ''}`}>
         {graph && graph.nodes.length > 0 ? (

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from app.gitlog import RawCommit, read_log
+from app.identity import PeopleIndex
 from app.lanes import assign_lanes, display_order
 from app.models import (
     AuthorStat,
@@ -16,19 +17,15 @@ from app.models import (
 from app.sync import list_branches, read_default_branch, read_fetched_at
 
 
-def author_stats(commits: list[RawCommit]) -> tuple[list[AuthorStat], dict[str, int]]:
-    """Commit count per author (by email), most active first, plus email → index lookup."""
+def author_stats(commits: list[RawCommit], people: PeopleIndex) -> list[AuthorStat]:
+    """Commit count per person (not per git identity), most active first."""
     stats: dict[str, AuthorStat] = {}
-    for commit in commits:  # newest first, so the display name is the most recent one
-        key = commit.author_email.lower()
-        if key not in stats:
-            stats[key] = AuthorStat(
-                name=commit.author_name, email=commit.author_email, commit_count=0
-            )
-        stats[key].commit_count += 1
-    ordered = sorted(stats.items(), key=lambda item: (-item[1].commit_count, item[1].name.lower()))
-    index_of = {key: index for index, (key, _) in enumerate(ordered)}
-    return [stat for _, stat in ordered], index_of
+    for commit in commits:
+        person = people.ref(commit.author_name, commit.author_email)
+        if person.key not in stats:
+            stats[person.key] = AuthorStat(**person.model_dump(), commit_count=0)
+        stats[person.key].commit_count += 1
+    return sorted(stats.values(), key=lambda stat: (-stat.commit_count, stat.name.lower()))
 
 
 def build_edges(commits: list[RawCommit], lane_of: dict[str, int]) -> list[GraphEdge]:
@@ -62,6 +59,7 @@ def build_graph(
     days: int | None,
     max_commits: int,
     priority: list[str],
+    people: PeopleIndex,
 ) -> Graph:
     """Graph of all branches' commits in the last `days` days (None = all history)."""
     branches = list_branches(path)
@@ -85,7 +83,7 @@ def build_graph(
     refs: dict[str, list[str]] = {}
     for branch in branches:
         refs.setdefault(branch.tip_sha, []).append(branch.name)
-    authors, author_index = author_stats(commits)
+    authors = author_stats(commits, people)
 
     nodes = [
         GraphNode(
@@ -93,7 +91,7 @@ def build_graph(
             short_sha=commit.sha[:7],
             lane=lane_of[commit.sha],
             x=x_of[commit.sha],
-            author_index=author_index[commit.author_email.lower()],
+            author=people.ref(commit.author_name, commit.author_email),
             author_name=commit.author_name,
             author_email=commit.author_email,
             authored_at=commit.authored_at,

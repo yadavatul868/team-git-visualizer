@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.git_runner import run_git
+from app.identity import PeopleIndex
 from app.models import CommitRef
 
 FIELD_SEP = "\x1f"
@@ -58,10 +59,11 @@ def read_log(path: Path, args: list[str]) -> list[RawCommit]:
     return parse_log(run_git(["log", f"--format={LOG_FORMAT}", *args], cwd=path))
 
 
-def to_commit_ref(commit: RawCommit) -> CommitRef:
+def to_commit_ref(commit: RawCommit, people: PeopleIndex) -> CommitRef:
     return CommitRef(
         sha=commit.sha,
         short_sha=commit.sha[:7],
+        author=people.ref(commit.author_name, commit.author_email),
         author_name=commit.author_name,
         author_email=commit.author_email,
         authored_at=commit.authored_at,

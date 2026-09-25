@@ -6,13 +6,18 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from app.config import Settings, get_settings
+from app.identity import IdentityStore
 from app.main import app
-from tests.conftest import RepoBuilder
+from tests.conftest import GITHUB_ACCOUNTS, START, RepoBuilder
 
 
 @pytest.fixture
-def client(cache_dir: Path) -> Iterator[TestClient]:
-    settings = Settings(_env_file=None, github_pat=SecretStr(""), cache_dir=cache_dir)
+def client(cache_dir: Path, tmp_path: Path) -> Iterator[TestClient]:
+    identity_dir = tmp_path / "identities"
+    IdentityStore(identity_dir).save_github_users(GITHUB_ACCOUNTS, START)
+    settings = Settings(
+        _env_file=None, github_pat=SecretStr(""), cache_dir=cache_dir, identity_dir=identity_dir
+    )
     app.dependency_overrides[get_settings] = lambda: settings
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -103,7 +108,7 @@ def test_merge_edge_details(client: TestClient, team_repo: RepoBuilder) -> None:
     body = client.get("/api/edge", params=params).json()
     assert body["is_merge"] is True
     assert body["parent_index"] == 1
-    assert body["merged_by_name"] == "Carol Coder"
+    assert body["merged_by"] == {"key": "gh:carol-c", "name": "Carol Coder", "login": "carol-c"}
     assert (body["merged_branch"], body["pr_number"]) == ("feat-old", 7)
     assert body["commits_brought_in"] == 2
     assert [commit["subject"] for commit in body["brought_in"]] == [
@@ -121,7 +126,7 @@ def test_first_parent_edge_details(client: TestClient, team_repo: RepoBuilder) -
     }
     body = client.get("/api/edge", params=params).json()
     assert body["is_merge"] is False
-    assert body["merged_by_name"] is None
+    assert body["merged_by"] is None
     assert body["brought_in"] == []
     assert [file["path"] for file in body["files"]] == ["login.py"]
 
@@ -135,3 +140,31 @@ def test_edge_between_unconnected_commits_is_404(
         "target": team_repo.sha_of("Add login form"),
     }
     assert client.get("/api/edge", params=params).status_code == 404
+
+
+def test_people_lists_everyone_with_their_identities(client: TestClient) -> None:
+    people = client.get("/api/people", params={"repo": "acme/demo"}).json()
+    by_name = {person["name"]: person for person in people}
+    assert set(by_name) == {"Alice Admin", "Bob Builder", "Carol Coder", "Your Name"}
+    assert {i["email"] for i in by_name["Bob Builder"]["identities"]} == {
+        "bob@example.com",
+        "bob@home.example",
+    }
+    assert by_name["Carol Coder"]["login"] == "carol-c"
+
+
+def test_manual_link_and_unlink(client: TestClient) -> None:
+    link = {"repo": "acme/demo", "email": "bob@laptop.local", "target_email": "bob@example.com"}
+    people = client.post("/api/people/link", json=link).json()
+    bob = next(person for person in people if person["name"] == "Bob Builder")
+    assert bob["commit_count"] == 5
+    assert bob["manually_linked"] is True
+    assert "Your Name" not in {person["name"] for person in people}
+
+    people = client.post("/api/people/unlink", json={"repo": "acme/demo", "key": bob["key"]}).json()
+    assert "Your Name" in {person["name"] for person in people}
+
+
+def test_link_rejects_unknown_emails(client: TestClient) -> None:
+    link = {"repo": "acme/demo", "email": "nobody@x.com", "target_email": "bob@example.com"}
+    assert client.post("/api/people/link", json=link).status_code == 404

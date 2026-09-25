@@ -4,6 +4,7 @@ import pytest
 
 from app.gitlog import find_pr_number, parse_merge_message
 from app.graph import build_graph
+from app.identity import PeopleIndex
 from app.models import Graph
 from tests.conftest import RepoBuilder
 
@@ -18,8 +19,8 @@ def lane_subjects(graph: Graph) -> dict[str, list[str]]:
 
 
 @pytest.fixture(scope="module")
-def graph(cached_repo: Path) -> Graph:
-    return build_graph(cached_repo, "acme/demo", days=None, max_commits=2000, priority=[])
+def graph(cached_repo: Path, people: PeopleIndex) -> Graph:
+    return build_graph(cached_repo, "acme/demo", None, 2000, priority=[], people=people)
 
 
 @pytest.mark.parametrize(
@@ -109,24 +110,27 @@ def test_summary_and_author_counts(graph: Graph) -> None:
     assert graph.summary.merge_count == 5
     assert graph.summary.branch_count == 5
     assert graph.default_branch == "main"
+    # People, not identities: Bob's home email and Carol's web merge are folded in.
     assert [(author.name, author.commit_count) for author in graph.authors] == [
         ("Alice Admin", 7),
-        ("Bob Builder", 5),
+        ("Bob Builder", 4),
         ("Carol Coder", 4),
+        ("Your Name", 1),
     ]
-    alice = graph.nodes[0]
-    assert graph.authors[alice.author_index].email == alice.author_email
+    merge = next(node for node in graph.nodes if node.subject.startswith("Merge pull request #7"))
+    assert (merge.author.name, merge.author.key) == ("Carol Coder", "gh:carol-c")
+    assert merge.author_name == "carol-c"  # the raw git identity is still available
 
 
-def test_priority_overrides_who_owns_shared_history(cached_repo: Path) -> None:
-    graph = build_graph(cached_repo, "acme/demo", None, 2000, priority=["feat/search"])
+def test_priority_overrides_who_owns_shared_history(cached_repo: Path, people: PeopleIndex) -> None:
+    graph = build_graph(cached_repo, "acme/demo", None, 2000, ["feat/search"], people)
     lanes = lane_subjects(graph)
     assert graph.lanes[0].name == "feat/search"
     assert "Set up dev config" in lanes["feat/search"]
 
 
-def test_truncation_keeps_the_newest_commits(cached_repo: Path) -> None:
-    graph = build_graph(cached_repo, "acme/demo", None, max_commits=5, priority=[])
+def test_truncation_keeps_the_newest_commits(cached_repo: Path, people: PeopleIndex) -> None:
+    graph = build_graph(cached_repo, "acme/demo", None, 5, [], people)
     assert graph.truncated
     assert graph.summary.commit_count == 5
     assert graph.nodes[-1].subject == "Merge branch 'stage' into main"

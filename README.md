@@ -15,6 +15,7 @@ details.
   show who merged, the PR, the commits brought in, and the files changed.
 - **Refresh** pulls the latest snapshot from GitHub. New branches appear and deleted ones
   disappear.
+- **One name per person**, however many git identities they used (see below).
 
 ## Setup
 
@@ -41,6 +42,22 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 | **Branch priority** | Optional, e.g. `main, stage, dev`. These branches get the top lanes and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
 | Author chips | Click to highlight one person's commits |
 | Graph | Scroll to zoom, drag to pan, click a dot or a line for details |
+
+## One name per person
+
+People often commit under several identities without meaning to. Examples: a work email, a
+personal email, a laptop with git's default "Your Name", or the private
+`…@users.noreply.github.com` address GitHub uses for merges made on its website. The app shows
+each person once. Two identities count as the same person if any of these links them:
+
+1. **The same GitHub account.** On each sync the app asks GitHub which account each new email
+   belongs to (one batched lookup, cached in `.cache/identities/`).
+2. **The same email.**
+3. **The same full name**, meaning at least two words. Placeholders like "Your Name" are ignored.
+4. **A manual merge** under **People…** in the app, for anyone still showing up twice.
+
+Links chain together: if an identity shares any of these with another, they merge. The name shown
+is the person's GitHub profile name, or their most-used real name if the profile has none.
 
 ## How lanes are inferred
 
