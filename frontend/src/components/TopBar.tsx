@@ -2,14 +2,9 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { relativeTime } from '../lib/format'
 import type { Theme } from '../lib/theme'
+import { WINDOW_OPTIONS } from '../lib/window'
 import type { RepoSuggestion } from '../types'
 
-const DAY_OPTIONS = [
-  { value: 7, label: 'Last 7 days' },
-  { value: 30, label: 'Last 30 days' },
-  { value: 90, label: 'Last 90 days' },
-  { value: 0, label: 'All history' },
-]
 
 interface TopBarProps {
   url: string
@@ -198,7 +193,7 @@ export function TopBar(props: TopBarProps) {
           <label className="field">
             <span>Window</span>
             <select value={props.days} onChange={(event) => props.onDaysChange(Number(event.target.value))}>
-              {DAY_OPTIONS.map((option) => (
+              {WINDOW_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

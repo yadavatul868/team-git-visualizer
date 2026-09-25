@@ -37,7 +37,7 @@ def test_graph_requires_a_loaded_repo(client: TestClient) -> None:
 
 
 def test_graph(client: TestClient) -> None:
-    response = client.get("/api/graph", params={"repo": "acme/demo", "days": 0})
+    response = client.get("/api/graph", params={"repo": "acme/demo"})  # default: 30 days
     assert response.status_code == 200
     body = response.json()
     assert body["summary"]["commit_count"] == 16
@@ -45,7 +45,7 @@ def test_graph(client: TestClient) -> None:
 
 
 def test_graph_priority_param(client: TestClient) -> None:
-    params = {"repo": "acme/demo", "days": 0, "priority": " dev , main "}
+    params = {"repo": "acme/demo", "days": 30, "priority": " dev , main "}
     lanes = client.get("/api/graph", params=params).json()["lanes"]
     assert [lane["name"] for lane in lanes[:2]] == ["dev", "main"]
 
@@ -168,3 +168,14 @@ def test_manual_link_and_unlink(client: TestClient) -> None:
 def test_link_rejects_unknown_emails(client: TestClient) -> None:
     link = {"repo": "acme/demo", "email": "nobody@x.com", "target_email": "bob@example.com"}
     assert client.post("/api/people/link", json=link).status_code == 404
+
+
+@pytest.mark.parametrize("days", [0, 31, 90])
+def test_window_is_limited_to_30_days(client: TestClient, days: int) -> None:
+    response = client.get("/api/graph", params={"repo": "acme/demo", "days": days})
+    assert response.status_code == 422
+
+
+def test_short_window_excludes_older_commits(client: TestClient) -> None:
+    body = client.get("/api/graph", params={"repo": "acme/demo", "days": 7}).json()
+    assert body["summary"]["commit_count"] == 0  # the fixture's commits are ~10 days old

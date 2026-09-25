@@ -134,3 +134,19 @@ export function fitViewport(
     zoom,
   }
 }
+
+/** Viewport showing `laneId` as the top row, with its newest commit centred horizontally. */
+export function laneViewport(
+  graph: Graph,
+  laneId: number,
+  { width, top }: Pick<FitOptions, 'width' | 'top'>,
+  zoom: number,
+): { x: number; y: number; zoom: number } {
+  const newest = graph.nodes.filter((node) => node.lane === laneId).at(-1) // nodes are oldest → newest
+  const centerX = newest ? commitCenter(newest).x : ORIGIN_X
+  return {
+    x: width / 2 - centerX * zoom,
+    y: top + (0.6 - laneId) * LANE_HEIGHT * zoom,
+    zoom,
+  }
+}

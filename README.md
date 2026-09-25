@@ -49,11 +49,12 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 |---|---|
 | Search box | Type part of a repo's name or URL to pick one from `repos.json` (↑/↓, Enter), or paste any GitHub URL |
 | **Load** / **Refresh** | Fetch the latest branches and commits from GitHub |
-| **Window** | Last 7 / 30 / 90 days, or all history (capped at the newest 2,000 commits) |
+| **Window** | Last 7, 14 or 30 days (30 is the default and the maximum; capped at the newest 2,000 commits) |
 | **Branch priority** | Optional, e.g. `main, stage, dev`. These branches get the top lanes and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
 | Author chips | Click to highlight one person's commits |
 | ☾ Dark / ☀ Light | Theme switch, top left. The app always opens light; your choice is remembered in the browser. |
-| Graph | Scroll to zoom, drag to pan, click a dot or a line for details |
+| Graph | Scroll (or drag) to move through branches; pinch, ⌘ + scroll or +/− to zoom; click a dot or a line for details |
+| **⌂ main** / branch names | In the branch column: jump to the default branch, or click any branch name to bring its lane to the top with its latest commit centred |
 | Fit view (⤢) | Zooms to show everything, but never smaller than about 7 branches tall. In bigger repos it shows the newest commits and the lanes around them. |
 
 ## One name per person

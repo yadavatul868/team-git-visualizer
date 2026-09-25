@@ -563,6 +563,29 @@ a.nav-title:hover {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+.lane-home {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 110px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1.5px solid var(--brand);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lane-home:hover {
+  background: var(--brand-tint);
+}
 .lane-count {
   padding: 0 6px;
   border-radius: 999px;
@@ -627,6 +650,16 @@ a.nav-title:hover {
 .lane-labels {
   position: absolute;
   inset: 0;
+}
+button.lane-label {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+button.lane-label:hover {
+  border-color: var(--brand);
 }
 .lane-label {
   position: absolute;

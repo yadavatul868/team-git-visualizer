@@ -28,7 +28,8 @@ AUTHORS = {
     "bob-laptop": ("Your Name", "bob@laptop.local"),  # git's placeholder name
     "carol-web": ("carol-c", "4242+carol-c@users.noreply.github.com"),  # GitHub web merge
 }
-START = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
+# Recent enough to sit inside the app's 30-day window whenever the tests run.
+START = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(days=10)
 
 
 class RepoBuilder:
