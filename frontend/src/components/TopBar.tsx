@@ -21,6 +21,9 @@ interface TopBarProps {
   onDaysChange: (days: number) => void
   priority: string
   onPriorityChange: (priority: string) => void
+  /** `owner/repo` of the loaded repository, if any. */
+  repo: string | null
+  onManagePeople: (() => void) | null
 }
 
 export function TopBar(props: TopBarProps) {
@@ -41,75 +44,107 @@ export function TopBar(props: TopBarProps) {
     if (priorityDraft.trim() !== props.priority) props.onPriorityChange(priorityDraft.trim())
   }
 
+  const status = props.syncing
+    ? 'Fetching from GitHub…'
+    : props.fetchedAt
+      ? `Fetched ${relativeTime(props.fetchedAt)}`
+      : 'Not loaded yet'
+
   return (
-    <header className="top-bar">
-      <div className="brand">
-        <span className="brand-mark" aria-hidden>
-          ⎇
-        </span>
-        Team Git Visualizer
+    <header className="site-header">
+      {/* Utility strip */}
+      <div className="utility-bar">
+        <span className="fetched-at">{status}</span>
       </div>
 
-      <form className="repo-form" onSubmit={submit}>
-        <input
-          type="url"
-          className="repo-input"
-          placeholder="https://github.com/owner/repo"
-          value={props.url}
-          onChange={(event) => props.onUrlChange(event.target.value)}
-          aria-label="GitHub repository URL"
-          required
-        />
-        <button type="submit" className="button primary" disabled={props.syncing}>
-          Load
-        </button>
-        <button
-          type="button"
-          className="button"
-          onClick={props.onRefresh}
-          disabled={!props.canRefresh || props.syncing}
-          title="Fetch the latest branches and commits from GitHub"
-        >
-          <span className={props.syncing ? 'spin' : undefined} aria-hidden>
-            ↻
+      {/* Brand + repository search */}
+      <div className="masthead">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden>
+            ⎇
           </span>
-          Refresh
-        </button>
-        <span className="fetched-at">
-          {props.syncing
-            ? 'Fetching from GitHub…'
-            : props.fetchedAt
-              ? `Fetched ${relativeTime(props.fetchedAt)}`
-              : ''}
-        </span>
-      </form>
-
-      <div className="view-controls">
-        <label className="field">
-          <span>Window</span>
-          <select value={props.days} onChange={(event) => props.onDaysChange(Number(event.target.value))}>
-            {DAY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label
-          className="field"
-          title="Branches listed here get the top lanes and win shared commits, e.g. main, stage, dev"
-        >
-          <span>Branch priority</span>
+          Team Git Visualizer
+        </div>
+        <form className="repo-form" onSubmit={submit}>
           <input
-            type="text"
-            placeholder="e.g. main, stage, dev"
-            value={priorityDraft}
-            onChange={(event) => setPriorityDraft(event.target.value)}
-            onBlur={applyPriority}
-            onKeyDown={(event) => event.key === 'Enter' && applyPriority()}
+            type="url"
+            className="repo-input"
+            placeholder="https://github.com/owner/repo"
+            value={props.url}
+            onChange={(event) => props.onUrlChange(event.target.value)}
+            aria-label="GitHub repository URL"
+            required
           />
-        </label>
+          <button type="submit" className="button primary" disabled={props.syncing}>
+            Load
+          </button>
+          <button
+            type="button"
+            className="button"
+            onClick={props.onRefresh}
+            disabled={!props.canRefresh || props.syncing}
+            title="Fetch the latest branches and commits from GitHub"
+          >
+            <span className={props.syncing ? 'spin' : undefined} aria-hidden>
+              ↻
+            </span>
+            Refresh
+          </button>
+        </form>
       </div>
+
+      {/* Navy navigation bar: view controls */}
+      <nav className="nav-bar" aria-label="View">
+        {props.repo ? (
+          <a
+            className="nav-title"
+            href={`https://github.com/${props.repo}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Open this repository on GitHub"
+          >
+            {props.repo} <span aria-hidden>↗</span>
+          </a>
+        ) : (
+          <span className="nav-title">No repository loaded</span>
+        )}
+        <div className="view-controls">
+          <label className="field">
+            <span>Window</span>
+            <select value={props.days} onChange={(event) => props.onDaysChange(Number(event.target.value))}>
+              {DAY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label
+            className="field"
+            title="Branches listed here get the top lanes and win shared commits, e.g. main, stage, dev"
+          >
+            <span>Branch priority</span>
+            <input
+              type="text"
+              placeholder="e.g. main, stage, dev"
+              value={priorityDraft}
+              onChange={(event) => setPriorityDraft(event.target.value)}
+              onBlur={applyPriority}
+              onKeyDown={(event) => event.key === 'Enter' && applyPriority()}
+            />
+          </label>
+          {props.onManagePeople && (
+            <button
+              type="button"
+              className="button inverse"
+              onClick={props.onManagePeople}
+              title="See every identity each person committed with, and merge any the app missed"
+            >
+              <span aria-hidden>☺</span> People
+            </button>
+          )}
+        </div>
+      </nav>
     </header>
   )
 }

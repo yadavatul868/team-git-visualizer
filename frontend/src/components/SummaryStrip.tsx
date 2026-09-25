@@ -9,7 +9,6 @@ interface SummaryStripProps {
   slots: AuthorSlots
   highlightedAuthor: string | null
   onHighlightAuthor: (personKey: string | null) => void
-  onManagePeople: () => void
 }
 
 /** Most active authors shown up front; the rest sit behind a "+N more" toggle. */
@@ -20,7 +19,6 @@ export function SummaryStrip({
   slots,
   highlightedAuthor,
   onHighlightAuthor,
-  onManagePeople,
 }: SummaryStripProps) {
   const [expanded, setExpanded] = useState(false)
   const { summary } = graph
@@ -30,6 +28,7 @@ export function SummaryStrip({
   return (
     <section className="summary-strip" aria-label="Summary">
       <div className="stats">
+        <span className="summary-lead">At a glance.</span>
         <Stat value={summary.commit_count} label="commits" />
         <Stat value={summary.merge_count} label="merges" />
         <Stat value={summary.branch_count} label="branches" />
@@ -70,14 +69,6 @@ export function SummaryStrip({
             {expanded ? 'Show fewer' : `+${hidden} more`}
           </button>
         )}
-        <button
-          type="button"
-          className="more-button"
-          onClick={onManagePeople}
-          title="See every identity each person committed with, and merge any the app missed"
-        >
-          People…
-        </button>
       </div>
     </section>
   )

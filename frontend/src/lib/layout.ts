@@ -95,3 +95,42 @@ export function gitEdgePath(
   const end = sourceX + bend
   return `M ${sourceX},${sourceY} C ${sourceX + bend / 2},${sourceY} ${sourceX + bend / 2},${targetY} ${end},${targetY} L ${targetX},${targetY}`
 }
+
+/** Fit view never zooms out further than this many lanes filling the graph's height. */
+export const MAX_LANES_IN_FIT = 7
+
+export interface FitOptions {
+  width: number
+  height: number
+  /** Space reserved above the first lane (the date ruler). */
+  top: number
+  /** Screen x of the oldest commit when everything fits horizontally. */
+  left: number
+  right: number
+}
+
+/**
+ * The "fit view" viewport: show everything when that keeps lanes readable, otherwise zoom only
+ * as far out as MAX_LANES_IN_FIT lanes, showing the newest commits and the top lanes (scrolled
+ * down just enough that the lane with the newest commit is in view).
+ */
+export function fitViewport(
+  graph: Graph,
+  { width, height, top, left, right }: FitOptions,
+): { x: number; y: number; zoom: number } {
+  const span = Math.max(1, graph.nodes.length - 1) * COLUMN_WIDTH
+  const usableHeight = Math.max(1, height - top - LANE_HEIGHT * 0.25)
+  const fitWidth = (width - left - right) / span
+  const fitHeight = usableHeight / (Math.max(1, graph.lanes.length) * LANE_HEIGHT)
+  const readable = usableHeight / (MAX_LANES_IN_FIT * LANE_HEIGHT)
+  const zoom = Math.min(1, Math.max(Math.min(fitWidth, fitHeight), readable))
+  const fitsHorizontally = span * zoom <= width - left - right
+  const lanesInView = Math.max(1, Math.floor(usableHeight / (LANE_HEIGHT * zoom)))
+  const newestLane = graph.nodes.at(-1)?.lane ?? 0
+  const firstLane = Math.max(0, newestLane - lanesInView + 1)
+  return {
+    x: fitsHorizontally ? left - ORIGIN_X * zoom : width - right - (ORIGIN_X + span) * zoom,
+    y: top + (0.6 - firstLane) * LANE_HEIGHT * zoom,
+    zoom,
+  }
+}

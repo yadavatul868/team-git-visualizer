@@ -125,6 +125,8 @@ export default function App() {
           setPriority(value)
           if (repo) save(priorityKey(repo), value)
         }}
+        repo={graph?.repo ?? repo}
+        onManagePeople={graph ? () => setPeopleOpen(true) : null}
       />
 
       {tokenMissing && (
@@ -147,7 +149,6 @@ export default function App() {
           slots={slots}
           highlightedAuthor={highlightedAuthor}
           onHighlightAuthor={setHighlightedAuthor}
-          onManagePeople={() => setPeopleOpen(true)}
         />
       ) : null}
       {peopleOpen && graph && (
