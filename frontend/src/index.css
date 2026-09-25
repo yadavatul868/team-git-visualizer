@@ -58,32 +58,33 @@
 /* Dark theme: opt-in via the switch in the top strip (light is the default). */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #06112b;
-  --surface: #0c1a3d;
-  --surface-raised: #13244d;
-  --surface-sunken: #091533;
-  --text-primary: #f2f5fb;
-  --text-secondary: #c2cbe0;
-  --text-muted: #8e9abb;
+  /* Neutral black/charcoal with light contrast; orange stays the only call-to-action colour. */
+  --page: #0d0d0d;
+  --surface: #161616;
+  --surface-raised: #1f1f1f;
+  --surface-sunken: #111111;
+  --text-primary: #f5f5f5;
+  --text-secondary: #c8c8c8;
+  --text-muted: #9a9a9a;
   --heading: #ffffff;
-  --gridline: #1e2e57;
-  --baseline: #2d3f6d;
-  --border: rgba(255, 255, 255, 0.12);
-  --edge: #4a5a85;
-  --edge-strong: #c2cbe0;
-  --brand: #9cc2ff;
-  --brand-tint: #0f2c5c;
-  --banner: #0e2551;
-  --nav: #0a1f52;
+  --gridline: #2a2a2a;
+  --baseline: #3a3a3a;
+  --border: rgba(255, 255, 255, 0.14);
+  --edge: #5f5f5f;
+  --edge-strong: #d6d6d6;
+  --brand: #f2f2f2;
+  --brand-tint: #2a2a2a;
+  --banner: #1c1c1c;
+  --nav: #000000;
   --on-nav: #ffffff;
   --card-border: rgba(255, 255, 255, 0.12);
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --link: #6fa8ff;
-  --accent: #6fa8ff;
-  --accent-soft: rgba(111, 168, 255, 0.18);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  --link: #f2f2f2;
+  --accent: #ffffff;
+  --accent-soft: rgba(255, 255, 255, 0.14);
   --lane-band: rgba(255, 255, 255, 0.03);
-  --minimap-mask: rgba(6, 17, 43, 0.7);
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --minimap-mask: rgba(13, 13, 13, 0.7);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 
   --success-text: #0ca30c;
 
@@ -95,6 +96,12 @@
   --author-6: #008300;
   --author-7: #9085e9;
   --author-8: #e66767;
+}
+/* Links are near-white in dark mode, so underline them to keep them recognisable. */
+:root[data-theme="dark"] a {
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+  text-underline-offset: 2px;
 }
 
 * {
