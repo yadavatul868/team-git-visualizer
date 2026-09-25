@@ -1,4 +1,5 @@
 import {
+  ControlButton,
   Controls,
   MiniMap,
   ReactFlow,
@@ -9,7 +10,7 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import type { AuthorSlots } from '../lib/colors'
 import { dayKey, formatDay } from '../lib/format'
@@ -18,6 +19,7 @@ import {
   LANE_HEIGHT,
   ORIGIN_X,
   commitCenter,
+  fitViewport,
   toFlowEdges,
   toFlowNodes,
   type CommitFlowNode,
@@ -33,7 +35,6 @@ const RULER_HEIGHT = 34
 /** Screen x (inside the graph area) of the oldest commit when the whole graph fits. */
 const FIRST_COMMIT_LEFT = 70
 const RIGHT_PADDING = 110
-const MIN_FIT_ZOOM = 0.6
 const MIN_LABEL_GAP = 26
 const MIN_DAY_GAP = 84
 const LANE_KIND_LABEL: Record<string, string> = {
@@ -68,19 +69,35 @@ function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onS
   )
   const edges = useMemo(() => toFlowEdges(graph, selection), [graph, selection])
 
-  // On each newly loaded graph: fit everything if that keeps commits readable (zoom ≥ 0.6),
-  // otherwise show the newest commits at full size.
+  const fit = useCallback(
+    (duration = 0) => {
+      const canvas = containerRef.current
+      const viewport = fitViewport(graph, {
+        width: canvas?.clientWidth ?? 1000,
+        height: canvas?.clientHeight ?? 600,
+        top: RULER_HEIGHT,
+        left: FIRST_COMMIT_LEFT,
+        right: RIGHT_PADDING,
+      })
+      void setViewport(viewport, { duration })
+    },
+    [graph, setViewport],
+  )
+
+  // Every newly loaded graph starts in the fit view, and stays fitted while the graph area
+  // changes size (layout settling, window resizes), until you pan or zoom yourself.
+  const userMoved = useRef(false)
   useEffect(() => {
-    const width = containerRef.current?.clientWidth ?? 1000
-    const span = Math.max(1, graph.nodes.length - 1) * COLUMN_WIDTH
-    const fitZoom = Math.min(1, (width - FIRST_COMMIT_LEFT - RIGHT_PADDING) / span)
-    const zoom = fitZoom >= MIN_FIT_ZOOM ? fitZoom : 1
-    const x =
-      fitZoom >= MIN_FIT_ZOOM
-        ? FIRST_COMMIT_LEFT - ORIGIN_X * zoom
-        : width - RIGHT_PADDING - (ORIGIN_X + span) * zoom
-    setViewport({ x, y: RULER_HEIGHT + LANE_HEIGHT * 0.75, zoom })
-  }, [graph, setViewport])
+    userMoved.current = false
+    fit()
+    const canvas = containerRef.current
+    if (!canvas) return
+    const observer = new ResizeObserver(() => {
+      if (!userMoved.current) fit()
+    })
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [fit])
 
   // Centre on a commit when asked (e.g. a parent clicked in the details panel).
   useEffect(() => {
@@ -113,6 +130,9 @@ function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onS
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
         onPaneClick={() => onSelect(null)}
+        onMoveStart={(event) => {
+          if (event) userMoved.current = true // null for programmatic moves
+        }}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
@@ -121,7 +141,25 @@ function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onS
         colorMode="system"
         proOptions={{ hideAttribution: true }}
       >
-        <Controls showInteractive={false} position="bottom-left" />
+        <Controls showInteractive={false} showFitView={false} position="bottom-left">
+          <ControlButton
+            onClick={() => {
+              userMoved.current = false
+              fit(300)
+            }}
+            title="Fit view"
+            aria-label="Fit view"
+          >
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
+              <path
+                d="M1 5V1h4M11 1h4v4M15 11v4h-4M5 15H1v-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+              />
+            </svg>
+          </ControlButton>
+        </Controls>
         <MiniMap
           pannable
           zoomable
