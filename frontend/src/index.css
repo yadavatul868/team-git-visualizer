@@ -452,13 +452,65 @@ code,
 
 /* ---------- Graph panel ---------- */
 .graph-panel {
-  position: relative;
+  display: grid;
+  grid-template-columns: var(--lane-column-width) minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--card-border);
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--card-shadow);
+  --lane-column-width: 210px;
+}
+@media (max-width: 700px) {
+  .graph-panel {
+    --lane-column-width: 140px;
+  }
+}
+.graph-canvas {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+/* Fixed branch column: always visible, never overlaps the graph */
+.lane-column {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-sunken);
+  border-right: 1px solid var(--card-border);
+}
+.lane-column-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--gridline);
+  background: var(--surface-sunken);
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.lane-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.lane-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.lane-row.is-odd {
+  background: var(--lane-band);
 }
 .graph-panel .react-flow {
   --xy-background-color: transparent;
@@ -508,17 +560,12 @@ code,
 }
 .lane-labels {
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 190px;
-  pointer-events: none;
-  z-index: 4;
+  inset: 0;
 }
 .lane-label {
   position: absolute;
-  left: 10px;
-  max-width: 178px;
+  left: 12px;
+  max-width: calc(100% - 24px);
   display: flex;
   align-items: center;
   gap: 6px;

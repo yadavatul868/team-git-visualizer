@@ -30,8 +30,8 @@ import { GitEdge } from './GitEdge'
 const nodeTypes = { commit: CommitNode }
 const edgeTypes = { git: GitEdge }
 const RULER_HEIGHT = 34
-/** Screen x of the oldest commit when the whole graph fits: just right of the lane labels. */
-const FIRST_COMMIT_LEFT = 240
+/** Screen x (inside the graph area) of the oldest commit when the whole graph fits. */
+const FIRST_COMMIT_LEFT = 70
 const RIGHT_PADDING = 110
 const MIN_FIT_ZOOM = 0.6
 const MIN_LABEL_GAP = 26
@@ -69,7 +69,7 @@ function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onS
   const edges = useMemo(() => toFlowEdges(graph, selection), [graph, selection])
 
   // On each newly loaded graph: fit everything if that keeps commits readable (zoom ≥ 0.6),
-  // otherwise show the newest commits at full size. Either way, clear the lane labels.
+  // otherwise show the newest commits at full size.
   useEffect(() => {
     const width = containerRef.current?.clientWidth ?? 1000
     const span = Math.max(1, graph.nodes.length - 1) * COLUMN_WIDTH
@@ -96,9 +96,16 @@ function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onS
     onSelect({ type: 'edge', id: edge.id, source: edge.source, target: edge.target })
 
   return (
-    <div className="graph-panel" ref={containerRef}>
-      <LaneBands graph={graph} />
-      <ReactFlow
+    <div className="graph-panel">
+      <aside className="lane-column" aria-label="Branches">
+        <LaneLabels graph={graph} />
+        <div className="lane-column-header" style={{ height: RULER_HEIGHT }}>
+          Branches <span className="lane-count">{graph.lanes.length}</span>
+        </div>
+      </aside>
+      <div className="graph-canvas" ref={containerRef}>
+        <LaneBands graph={graph} />
+        <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -123,9 +130,9 @@ function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onS
           nodeBorderRadius={20}
           maskColor="var(--minimap-mask)"
         />
-      </ReactFlow>
-      <DateRuler graph={graph} />
-      <LaneLabels graph={graph} />
+        </ReactFlow>
+        <DateRuler graph={graph} />
+      </div>
     </div>
   )
 }
@@ -149,12 +156,21 @@ function LaneBands({ graph }: { graph: Graph }) {
   )
 }
 
-/** Branch names pinned to the left edge, following the lanes as you pan and zoom vertically. */
+/** The fixed branch column: one row per lane, following the graph as you pan and zoom
+ *  vertically, but never moving sideways, so names never cover commits. */
 function LaneLabels({ graph }: { graph: Graph }) {
   const { y, zoom } = useViewport()
   const visible = skipCrowded(graph.lanes, (lane) => y + lane.id * LANE_HEIGHT * zoom, MIN_LABEL_GAP)
   return (
     <div className="lane-labels">
+      {graph.lanes.map((lane) => (
+        <div
+          key={`row-${lane.id}`}
+          className={`lane-row${lane.id % 2 ? ' is-odd' : ''}`}
+          style={{ top: y + (lane.id - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
+          aria-hidden
+        />
+      ))}
       {visible.map(({ item: lane, position }) => (
         <div
           key={lane.id}
