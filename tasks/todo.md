@@ -32,7 +32,7 @@
 | D1 | **Lane inference:** git doesn't record which branch a commit was made on, so branches claim commits along their first-parent chains, one at a time; shared history goes to whoever claims first. **Claim order:** optional user-supplied branch priority (e.g. `main, stage, dev`) → the default branch (read from GitHub) → the rest ranked by most merge commits (integration branches collect merges), then how many other branches contain their tip, then most recent tip. *(Revised in M1: a pure recency order let feature branches steal the integration branch's history.)* | Only way to draw "branches as lanes" from raw git data; the priority list lets you correct the rare wrong guess without anything being hard-coded |
 | D2 | **Deleted branches:** commits that only survive through a merge get their own lane, named from the merge message (`Merge pull request #12 from org/feat-x` → `feat-x`, marked *(deleted)*) | Covers "merged and deleted" branches, which are very common with PRs |
 | D3 | **Horizontal axis = commit order, not a real time scale.** A date ruler along the top marks day boundaries. | A true time scale bunches bursts of commits on top of each other and leaves long empty gaps over weekends |
-| D4 | **Node colour = author; edge/lane colour = branch.** The legend shows each author's colour and commit count. | "Who did what" is the main question you want answered |
+| D4 | **Node colour = author** (8-colour validated palette; a colour follows the person and is remembered per repo, not by rank), with **initials inside each dot** so identity never relies on colour alone. **Edges are neutral grey**, merges dashed. *(Revised in M2: colouring edges by branch clashed with author colours.)* | "Who did what" is the main question you want answered |
 | D5 | **Merge direction is shown, not judged**, e.g. "`dev` → `feat/login`" (a sync) vs "`feat/login` → `dev`" (a merge back) | Satisfies R4 without knowing which branch is the integration branch |
 | D6 | **Squash merges** show up as ordinary commits with no merge edge. If the message contains `(#123)`, the details show "squash-merged from PR #123". | A limitation of git data; flagged so it isn't a surprise |
 | D7 | Authors are identified by email, and display names come from the latest commit | Simple for v1; `.mailmap` support can come later |
@@ -120,9 +120,7 @@ frontend/  package.json, vite.config.ts, src/{App.tsx, api.ts, types.ts,
 
 ## 7. Milestones (each: feature branch off `dev` → PR into `dev`)
 - [x] **M1 `feature/backend`** — scaffold, config, safe git runner, sync, graph, commit and edge endpoints, fixture and tests
-- [ ] **M2 `feature/frontend-graph`** — Vite scaffold, top bar, summary strip, graph panel with lanes, zoom and pan
-- [ ] **M3 `feature/details-panel`** — node and edge detail views wired to the API
-- [ ] **M4 `feature/polish`** — styling, loading/empty/error states, README (setup + run), screenshots
+- [x] **M2 + M3 + M4 `feature/frontend-graph`** — top bar, summary strip, graph panel (lanes, zoom, pan, minimap, date ruler), node and edge detail views, loading/empty/error states, README, `dev.sh` *(combined into one branch so the first reviewable version is complete)*
 - [ ] **Review with user** → collect missing fields → plan **v2 (protocol checks + fix instructions)**
 
 ## Review
@@ -139,3 +137,19 @@ frontend/  package.json, vite.config.ts, src/{App.tsx, api.ts, types.ts,
 - Found on real data: the same person shows up as two authors, "Atul Yadav" (local commits) and
   "yadavatul868" (GitHub web merges use the GitHub name + noreply email). Candidate for v2
   identity merging (`.mailmap` or GitHub login lookup)
+
+### M2–M4 — frontend (done)
+- React + Vite + TS + React Flow. Components: `TopBar`, `SummaryStrip`, `GraphPanel`
+  (custom `CommitNode`, git-style `GitEdge`, lane bands, sticky lane labels, date ruler, minimap),
+  `DetailsPanel` (commit view, edge view), `FileList`
+- Git-graph edge routing: a branch-off leaves its parent lane immediately; a merge runs along its own lane
+  and joins the target just before the merge commit
+- Initial view fits the whole graph when zoom stays ≥ 0.6, otherwise shows the newest commits at 100%
+- Lane and day labels skip crowded neighbours when zoomed out; author chips collapse beyond 8
+  ("+N more")
+- Verified in the browser (light and dark) on this repo: node details (merge commit, PR #1, 27 files),
+  merge-edge and branch-off-edge details, author highlight, reload restores the last repo from cache
+- Stress test on `pallets/flask`, all history (2,000 commits, 846 merges, ~270 authors): renders, pans
+  and zooms smoothly; deleted branches get lanes from merge messages. It exposed the author-chip overflow
+  and the label pile-up, both fixed
+- `npm run build` + `oxlint` clean; backend still 47/47

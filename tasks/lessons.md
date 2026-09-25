@@ -13,3 +13,9 @@
 - **What happened:** a `cd backend` in one Bash call carried over to the next, so the Vite
   scaffold landed in `backend/frontend`.
 - **Rule:** use absolute paths, or run `cd` inside a subshell `( … )`, when scaffolding.
+
+## Browser preview can't launch servers from OneDrive
+- **What happened:** the browser pane's launcher got "Operation not permitted" running `dev.sh`,
+  because macOS privacy protection blocks it from reading `~/Library/CloudStorage`.
+- **Rule:** start `./dev.sh` from the shell in the background, and point `.claude/launch.json`
+  (in the session root, `10.AGENTICAI/`) at `{"url": "http://localhost:5173"}` with no command.
