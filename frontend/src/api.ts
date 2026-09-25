@@ -1,4 +1,12 @@
-import type { CommitDetails, EdgeDetails, Graph, Health, Person, RepoSnapshot } from './types'
+import type {
+  CommitDetails,
+  EdgeDetails,
+  Graph,
+  Health,
+  Person,
+  RepoSnapshot,
+  RepoSuggestion,
+} from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init)
@@ -18,6 +26,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<Health>('/api/health'),
+
+  repoSuggestions: () => request<RepoSuggestion[]>('/api/repos'),
 
   sync: (url: string) =>
     request<RepoSnapshot>('/api/repo/sync', {

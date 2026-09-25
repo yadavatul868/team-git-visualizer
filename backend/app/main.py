@@ -19,9 +19,11 @@ from app.models import (
     LinkRequest,
     Person,
     RepoSnapshot,
+    RepoSuggestion,
     SyncRequest,
     UnlinkRequest,
 )
+from app.suggestions import InvalidReposFileError, load_suggestions
 from app.sync import (
     InvalidRepoError,
     RepoAccessError,
@@ -57,6 +59,7 @@ ERROR_STATUS: dict[type[Exception], int] = {
     CommitNotFoundError: 404,
     EdgeNotFoundError: 404,
     UnknownPersonError: 404,
+    InvalidReposFileError: 422,
     GitError: 502,
 }
 
@@ -75,6 +78,12 @@ for exc_type, status_code in ERROR_STATUS.items():
 @app.get("/api/health")
 def health(settings: SettingsDep) -> dict[str, str | bool]:
     return {"status": "ok", "token_configured": settings.token is not None}
+
+
+@app.get("/api/repos")
+def repo_suggestions(settings: SettingsDep) -> list[RepoSuggestion]:
+    """Repositories listed in repos.json, offered as suggestions in the search box."""
+    return load_suggestions(settings.repos_file)
 
 
 @app.post("/api/repo/sync")
