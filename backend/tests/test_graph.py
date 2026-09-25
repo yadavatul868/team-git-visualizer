@@ -1,0 +1,133 @@
+from pathlib import Path
+
+import pytest
+
+from app.gitlog import find_pr_number, parse_merge_message
+from app.graph import build_graph
+from app.models import Graph
+from tests.conftest import RepoBuilder
+
+
+def lane_subjects(graph: Graph) -> dict[str, list[str]]:
+    """Lane name → subjects of its commits, oldest first."""
+    names = {lane.id: lane.name for lane in graph.lanes}
+    result: dict[str, list[str]] = {name: [] for name in names.values()}
+    for node in graph.nodes:
+        result[names[node.lane]].append(node.subject)
+    return result
+
+
+@pytest.fixture(scope="module")
+def graph(cached_repo: Path) -> Graph:
+    return build_graph(cached_repo, "acme/demo", days=None, max_commits=2000, priority=[])
+
+
+@pytest.mark.parametrize(
+    ("subject", "expected"),
+    [
+        ("Merge pull request #7 from acme/feat-old", ("feat-old", 7)),
+        ("Merge pull request #12 from acme/feature/deep/name", ("feature/deep/name", 12)),
+        ("Merge branch 'feat/login' into dev", ("feat/login", None)),
+        ("Merge remote-tracking branch 'origin/dev' into feat/x", ("dev", None)),
+        ("Merge branch 'hotfix'", ("hotfix", None)),
+        ("Add search", (None, None)),
+    ],
+)
+def test_parse_merge_message(subject: str, expected: tuple[str | None, int | None]) -> None:
+    assert parse_merge_message(subject) == expected
+
+
+def test_find_pr_number_handles_squash_merges() -> None:
+    assert find_pr_number("Add report export (#12)") == 12
+    assert find_pr_number("Merge pull request #7 from acme/feat-old") == 7
+    assert find_pr_number("Fix issue #3 in parser") is None
+
+
+def test_default_heuristic_puts_each_commit_on_its_branch(graph: Graph) -> None:
+    assert lane_subjects(graph) == {
+        "main": ["Initial commit", "Merge branch 'stage' into main"],
+        "dev": [
+            "Set up dev config",
+            "Update config",
+            "Merge branch 'feat/login' into dev",
+            "Merge pull request #7 from acme/feat-old",
+            "Add report export (#12)",
+        ],
+        "feat/login": ["Add login form", "Add login validation", "Move login into auth package"],
+        "feat/search": ["Add search", "Merge branch 'dev' into feat/search", "Improve search"],
+        "feat-old": ["Add old export", "Tweak export"],
+        "stage": ["Merge branch 'dev' into stage"],
+    }
+
+
+def test_lanes_are_ordered_default_first_then_by_first_commit(graph: Graph) -> None:
+    assert [lane.name for lane in graph.lanes] == [
+        "main", "dev", "feat/login", "feat/search", "feat-old", "stage"
+    ]  # fmt: skip
+    kinds = {lane.name: lane.kind for lane in graph.lanes}
+    assert kinds["main"] == "default"
+    assert kinds["feat-old"] == "deleted"
+    assert kinds["dev"] == "branch"
+
+
+def test_edge_kinds(graph: Graph, team_repo: RepoBuilder) -> None:
+    kinds = {(edge.source, edge.target): edge.kind for edge in graph.edges}
+    sha = team_repo.sha_of
+    assert kinds[(sha("Initial commit"), sha("Set up dev config"))] == "branch-off"
+    assert kinds[(sha("Set up dev config"), sha("Update config"))] == "continue"
+    assert kinds[(sha("Tweak export"), sha("Merge pull request #7 from acme/feat-old"))] == "merge"
+    assert kinds[(sha("Add report export (#12)"), sha("Merge branch 'dev' into feat/search"))] == (
+        "merge"
+    )
+    assert len(graph.edges) == sum(len(node_parents) for node_parents in _parents(team_repo))
+
+
+def _parents(team_repo: RepoBuilder) -> list[list[str]]:
+    output = team_repo.git("log", "--all", "--format=%P")
+    return [line.split() for line in output.splitlines()]
+
+
+def test_nodes_are_positioned_oldest_to_newest(graph: Graph) -> None:
+    assert [node.x for node in graph.nodes] == list(range(16))
+    assert graph.nodes[0].subject == "Initial commit"
+    assert graph.nodes[-1].subject == "Merge branch 'stage' into main"
+
+
+def test_branch_tips_are_labelled(graph: Graph) -> None:
+    refs = {node.subject: node.refs for node in graph.nodes if node.refs}
+    assert refs == {
+        "Merge branch 'stage' into main": ["main"],
+        "Merge branch 'dev' into stage": ["stage"],
+        "Improve search": ["feat/search"],
+        "Add report export (#12)": ["dev"],
+        "Move login into auth package": ["feat/login"],
+    }
+
+
+def test_summary_and_author_counts(graph: Graph) -> None:
+    assert graph.summary.commit_count == 16
+    assert graph.summary.merge_count == 5
+    assert graph.summary.branch_count == 5
+    assert graph.default_branch == "main"
+    assert [(author.name, author.commit_count) for author in graph.authors] == [
+        ("Alice Admin", 7),
+        ("Bob Builder", 5),
+        ("Carol Coder", 4),
+    ]
+    alice = graph.nodes[0]
+    assert graph.authors[alice.author_index].email == alice.author_email
+
+
+def test_priority_overrides_who_owns_shared_history(cached_repo: Path) -> None:
+    graph = build_graph(cached_repo, "acme/demo", None, 2000, priority=["feat/search"])
+    lanes = lane_subjects(graph)
+    assert graph.lanes[0].name == "feat/search"
+    assert "Set up dev config" in lanes["feat/search"]
+
+
+def test_truncation_keeps_the_newest_commits(cached_repo: Path) -> None:
+    graph = build_graph(cached_repo, "acme/demo", None, max_commits=5, priority=[])
+    assert graph.truncated
+    assert graph.summary.commit_count == 5
+    assert graph.nodes[-1].subject == "Merge branch 'stage' into main"
+    assert all(edge.source in {n.sha for n in graph.nodes} for edge in graph.edges)
