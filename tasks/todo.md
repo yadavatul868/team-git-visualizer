@@ -53,6 +53,18 @@ FastAPI (Python 3.12+, uv) ── git CLI ──▶ .cache/repos/<owner>__<repo>
 ```
 Toolchain verified on this machine: node 25, npm 11, uv 0.10, Python 3.14, git 2.50.
 
+### Environments (decided with the user)
+| | Backend | Frontend |
+|---|---|---|
+| Manager | **uv** | **npm** |
+| Manifest / lock | `backend/pyproject.toml` / `backend/uv.lock` | `frontend/package.json` / `frontend/package-lock.json` |
+| Isolated env | `backend/.venv` | `frontend/node_modules/` |
+| Runtime pin | Python **3.13** (`backend/.python-version`) | Node **25** (`frontend/.nvmrc`, `engines`) |
+| Install | `cd backend && uv sync` | `cd frontend && npm install` |
+
+- `backend/` is a **standalone** uv project, not a member of the parent `10.AGENTICAI` uv workspace
+- One root command (`./dev.sh`) starts FastAPI and Vite together; it's added in M1/M2 once there's an app to start
+
 ## 3. Backend API
 | Endpoint | Does | Returns |
 |---|---|---|
