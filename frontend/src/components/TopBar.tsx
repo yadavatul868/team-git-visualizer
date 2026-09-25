@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { relativeTime } from '../lib/format'
+import type { Theme } from '../lib/theme'
 
 const DAY_OPTIONS = [
   { value: 7, label: 'Last 7 days' },
@@ -24,6 +25,8 @@ interface TopBarProps {
   /** `owner/repo` of the loaded repository, if any. */
   repo: string | null
   onManagePeople: (() => void) | null
+  theme: Theme
+  onToggleTheme: () => void
 }
 
 export function TopBar(props: TopBarProps) {
@@ -54,6 +57,15 @@ export function TopBar(props: TopBarProps) {
     <header className="site-header">
       {/* Utility strip */}
       <div className="utility-bar">
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={props.onToggleTheme}
+          aria-label={`Switch to ${props.theme === 'light' ? 'dark' : 'light'} theme`}
+        >
+          <span aria-hidden>{props.theme === 'light' ? '☾' : '☀'}</span>
+          {props.theme === 'light' ? 'Dark' : 'Light'}
+        </button>
         <span className="fetched-at">{status}</span>
       </div>
 
