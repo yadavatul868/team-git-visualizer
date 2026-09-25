@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { relativeTime } from '../lib/format'
 import type { Theme } from '../lib/theme'
+import type { RepoSuggestion } from '../types'
 
 const DAY_OPTIONS = [
   { value: 7, label: 'Last 7 days' },
@@ -13,7 +14,9 @@ const DAY_OPTIONS = [
 interface TopBarProps {
   url: string
   onUrlChange: (url: string) => void
-  onLoad: () => void
+  /** Load the given URL (defaults to the one in the search box). */
+  onLoad: (url?: string) => void
+  suggestions: RepoSuggestion[]
   onRefresh: () => void
   canRefresh: boolean
   syncing: boolean
@@ -32,6 +35,40 @@ interface TopBarProps {
 export function TopBar(props: TopBarProps) {
   const [priorityDraft, setPriorityDraft] = useState(props.priority)
   const [, setTick] = useState(0)
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+
+  const query = props.url.trim().toLowerCase()
+  const exactMatch = props.suggestions.some((s) => s.url.toLowerCase() === query)
+  const matches =
+    !query || exactMatch
+      ? props.suggestions
+      : props.suggestions.filter(
+          (s) => s.name.toLowerCase().includes(query) || s.url.toLowerCase().includes(query),
+        )
+  const showSuggestions = suggestOpen && matches.length > 0
+
+  const choose = (suggestion: RepoSuggestion) => {
+    props.onUrlChange(suggestion.url)
+    setSuggestOpen(false)
+    setActiveIndex(-1)
+    props.onLoad(suggestion.url)
+  }
+
+  const onSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      setSuggestOpen(true)
+      const step = event.key === 'ArrowDown' ? 1 : -1
+      setActiveIndex((index) => (index + step + matches.length) % Math.max(1, matches.length))
+    } else if (event.key === 'Enter' && showSuggestions && activeIndex >= 0) {
+      event.preventDefault()
+      choose(matches[activeIndex])
+    } else if (event.key === 'Escape') {
+      setSuggestOpen(false)
+      setActiveIndex(-1)
+    }
+  }
 
   // Re-render every 30s so "fetched 2 min ago" stays current.
   useEffect(() => {
@@ -41,6 +78,7 @@ export function TopBar(props: TopBarProps) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    setSuggestOpen(false)
     props.onLoad()
   }
   const applyPriority = () => {
@@ -78,15 +116,51 @@ export function TopBar(props: TopBarProps) {
           Team Git Visualizer
         </div>
         <form className="repo-form" onSubmit={submit}>
-          <input
-            type="url"
-            className="repo-input"
-            placeholder="https://github.com/owner/repo"
-            value={props.url}
-            onChange={(event) => props.onUrlChange(event.target.value)}
-            aria-label="GitHub repository URL"
-            required
-          />
+          <div className="repo-combobox">
+            <input
+              type="url"
+              className="repo-input"
+              placeholder="Search your repos or paste https://github.com/owner/repo"
+              value={props.url}
+              onChange={(event) => {
+                props.onUrlChange(event.target.value)
+                setSuggestOpen(true)
+                setActiveIndex(-1)
+              }}
+              onFocus={() => setSuggestOpen(true)}
+              onBlur={() => setSuggestOpen(false)}
+              onKeyDown={onSearchKey}
+              role="combobox"
+              aria-label="GitHub repository URL"
+              aria-autocomplete="list"
+              aria-expanded={showSuggestions}
+              aria-controls="repo-suggestions"
+              aria-activedescendant={activeIndex >= 0 ? `repo-suggestion-${activeIndex}` : undefined}
+              autoComplete="off"
+              required
+            />
+            {showSuggestions && (
+              <ul id="repo-suggestions" className="repo-suggestions" role="listbox">
+                {matches.map((suggestion, index) => (
+                  <li
+                    key={suggestion.url}
+                    id={`repo-suggestion-${index}`}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={index === activeIndex ? 'is-active' : undefined}
+                    onMouseDown={(event) => {
+                      event.preventDefault() // keep focus; choose before blur closes the list
+                      choose(suggestion)
+                    }}
+                    onMouseEnter={() => setActiveIndex(index)}
+                  >
+                    <span className="suggestion-name">{suggestion.name}</span>
+                    <span className="suggestion-url">{suggestion.url.replace('https://', '')}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <button type="submit" className="button primary" disabled={props.syncing}>
             Load
           </button>

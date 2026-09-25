@@ -15,6 +15,12 @@ export interface BranchInfo {
   last_author_name: string
 }
 
+/** A repository suggested in the search box (from repos.json). */
+export interface RepoSuggestion {
+  name: string
+  url: string
+}
+
 export interface RepoSnapshot {
   repo: string
   url: string

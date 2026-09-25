@@ -9,7 +9,7 @@ import { TopBar } from './components/TopBar'
 import { assignAuthorSlots } from './lib/colors'
 import { load, save } from './lib/storage'
 import { applyTheme, savedTheme, type Theme } from './lib/theme'
-import type { Graph, Selection } from './types'
+import type { Graph, RepoSuggestion, Selection } from './types'
 
 const GITHUB_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/
 
@@ -43,6 +43,14 @@ export default function App() {
   const [graphVersion, setGraphVersion] = useState(0)
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(savedTheme)
+  const [suggestions, setSuggestions] = useState<RepoSuggestion[]>([])
+
+  useEffect(() => {
+    api
+      .repoSuggestions()
+      .then(setSuggestions)
+      .catch((err: Error) => setError(`Repo suggestions: ${err.message}`))
+  }, [])
 
   useEffect(() => {
     api
@@ -112,7 +120,8 @@ export default function App() {
         key={repo ?? ''}
         url={url}
         onUrlChange={setUrl}
-        onLoad={() => sync(url)}
+        onLoad={(target) => sync(target ?? url)}
+        suggestions={suggestions}
         onRefresh={() => sync(url)}
         canRefresh={repo !== null && repoKeyFromUrl(url)?.toLowerCase() === repo.toLowerCase()}
         syncing={syncing}

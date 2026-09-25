@@ -12,6 +12,13 @@ class SyncRequest(BaseModel):
     url: str
 
 
+class RepoSuggestion(BaseModel):
+    """A repository offered as a suggestion in the search box (from repos.json)."""
+
+    name: str
+    url: str
+
+
 class BranchInfo(BaseModel):
     name: str
     tip_sha: str

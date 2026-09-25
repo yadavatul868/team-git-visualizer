@@ -27,16 +27,27 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
    ```
    A fine-grained token with **Contents: Read** and **Metadata: Read** is enough. Only the backend
    reads it; it's never sent to the browser, written to disk or logged.
-2. Start everything:
+2. Optional: list your repositories in `repos.json` so the search box suggests them (copy
+   `repos.example.json`). Each entry has a friendly name and a GitHub URL:
+   ```json
+   [
+     { "name": "Payments API", "url": "https://github.com/your-org/payments-api" },
+     { "name": "Web app", "url": "https://github.com/your-org/web-app" }
+   ]
+   ```
+   `repos.json` is git-ignored because it may list private or company repos. Edits show up on
+   the next page reload.
+3. Start everything:
    ```bash
    ./dev.sh
    ```
-3. Open http://localhost:5173.
+4. Open http://localhost:5173.
 
 ## Using it
 
 | Control | What it does |
 |---|---|
+| Search box | Type part of a repo's name or URL to pick one from `repos.json` (↑/↓, Enter), or paste any GitHub URL |
 | **Load** / **Refresh** | Fetch the latest branches and commits from GitHub |
 | **Window** | Last 7 / 30 / 90 days, or all history (capped at the newest 2,000 commits) |
 | **Branch priority** | Optional, e.g. `main, stage, dev`. These branches get the top lanes and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |

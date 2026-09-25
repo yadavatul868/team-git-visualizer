@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     cache_dir: Path = REPO_ROOT / ".cache" / "repos"
     identity_dir: Path = REPO_ROOT / ".cache" / "identities"
     max_commits: int = 2000
+    repos_file: Path = REPO_ROOT / "repos.json"
 
     @property
     def token(self) -> str | None:

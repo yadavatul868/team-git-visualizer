@@ -17,3 +17,6 @@ dist/
 
 # Local development notes (plans, lessons); kept on this machine only
 tasks/
+
+# Your repository suggestions (may list private/company repos); see repos.example.json
+repos.json
