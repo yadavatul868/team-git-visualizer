@@ -49,14 +49,13 @@ export function toFlowNodes(
       height: NODE_SIZE,
       draggable: false,
       connectable: false,
-      className: `author-node-${slots[commit.author_email.toLowerCase()] ?? 'other'}`,
+      className: `author-node-${slots[commit.author.key] ?? 'other'}`,
       data: {
         commit,
-        color: authorColor(slots, commit.author_email),
-        initials: initials(commit.author_name),
+        color: authorColor(slots, commit.author.key),
+        initials: initials(commit.author.name),
         selected: selection?.type === 'node' && selection.sha === commit.sha,
-        dimmed:
-          highlightedAuthor !== null && commit.author_email.toLowerCase() !== highlightedAuthor,
+        dimmed: highlightedAuthor !== null && commit.author.key !== highlightedAuthor,
       },
     }
   })

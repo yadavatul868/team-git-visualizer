@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.git_runner import GitError, run_git
 from app.gitlog import FIELD_SEP, find_pr_number, parse_merge_message, read_log, to_commit_ref
+from app.identity import PeopleIndex
 from app.models import CommitDetails, CommitRef, EdgeDetails, FileChange
 from app.sync import RepoRef
 
@@ -32,10 +33,11 @@ def resolve_commit(path: Path, sha: str) -> str:
         raise CommitNotFoundError(f"Commit {sha} not found. Try Refresh.") from None
 
 
-def read_commit_refs(path: Path, shas: list[str]) -> list[CommitRef]:
+def read_commit_refs(path: Path, shas: list[str], people: PeopleIndex) -> list[CommitRef]:
     if not shas:
         return []
-    return [to_commit_ref(commit) for commit in read_log(path, ["--no-walk=unsorted", *shas])]
+    commits = read_log(path, ["--no-walk=unsorted", *shas])
+    return [to_commit_ref(commit, people) for commit in commits]
 
 
 def _parse_name_status(output: str) -> list[tuple[str, str | None, str]]:
@@ -97,7 +99,7 @@ def _parents_of(path: Path, sha: str) -> list[str]:
     return run_git(["rev-list", "--parents", "--max-count=1", sha], cwd=path).split()[1:]
 
 
-def commit_details(path: Path, ref: RepoRef, sha: str) -> CommitDetails:
+def commit_details(path: Path, ref: RepoRef, sha: str, people: PeopleIndex) -> CommitDetails:
     """Everything about one commit. For merges, files are compared to the first parent."""
     full_sha = resolve_commit(path, sha)
     output = run_git(["show", "--no-patch", f"--format={DETAIL_FORMAT}", full_sha], cwd=path)
@@ -116,6 +118,7 @@ def commit_details(path: Path, ref: RepoRef, sha: str) -> CommitDetails:
     return CommitDetails(
         sha=full_sha,
         short_sha=full_sha[:7],
+        author=people.ref(author_name, author_email),
         author_name=author_name,
         author_email=author_email,
         authored_at=authored_at,
@@ -123,7 +126,7 @@ def commit_details(path: Path, ref: RepoRef, sha: str) -> CommitDetails:
         committer_email=committer_email,
         committed_at=committed_at,
         message=message,
-        parents=read_commit_refs(path, parent_shas),
+        parents=read_commit_refs(path, parent_shas, people),
         branches=branches,
         is_merge=is_merge,
         merged_branch=parse_merge_message(subject)[0] if is_merge else None,
@@ -134,7 +137,9 @@ def commit_details(path: Path, ref: RepoRef, sha: str) -> CommitDetails:
     )
 
 
-def edge_details(path: Path, ref: RepoRef, source: str, target: str) -> EdgeDetails:
+def edge_details(
+    path: Path, ref: RepoRef, source: str, target: str, people: PeopleIndex
+) -> EdgeDetails:
     """Details of the connection from parent `source` to child `target`.
 
     For a merge edge (source is a non-first parent), also reports who merged, how many
@@ -146,7 +151,7 @@ def edge_details(path: Path, ref: RepoRef, source: str, target: str) -> EdgeDeta
     if source_sha not in target_parents:
         raise EdgeNotFoundError(f"{source_sha[:7]} is not a parent of {target_sha[:7]}")
     parent_index = target_parents.index(source_sha)
-    source_ref, target_ref = read_commit_refs(path, [source_sha, target_sha])
+    source_ref, target_ref = read_commit_refs(path, [source_sha, target_sha], people)
     time_gap = datetime.fromisoformat(target_ref.committed_at) - datetime.fromisoformat(
         source_ref.committed_at
     )
@@ -160,7 +165,7 @@ def edge_details(path: Path, ref: RepoRef, source: str, target: str) -> EdgeDeta
         commit_range = f"{first_parent}..{source_sha}"
         commits_brought_in = int(run_git(["rev-list", "--count", commit_range], cwd=path))
         brought_in = [
-            to_commit_ref(commit)
+            to_commit_ref(commit, people)
             for commit in read_log(path, [f"--max-count={MAX_BROUGHT_IN}", commit_range])
         ]
         files, files_truncated = diff_files(path, first_parent, target_sha)
@@ -173,8 +178,7 @@ def edge_details(path: Path, ref: RepoRef, source: str, target: str) -> EdgeDeta
         parent_index=parent_index,
         is_merge=is_merge,
         time_gap_seconds=int(time_gap.total_seconds()),
-        merged_by_name=target_ref.author_name if is_merge else None,
-        merged_by_email=target_ref.author_email if is_merge else None,
+        merged_by=target_ref.author if is_merge else None,
         merged_branch=merged_branch,
         pr_number=pr_number,
         commits_brought_in=commits_brought_in,

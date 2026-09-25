@@ -8,13 +8,20 @@ interface SummaryStripProps {
   graph: Graph
   slots: AuthorSlots
   highlightedAuthor: string | null
-  onHighlightAuthor: (email: string | null) => void
+  onHighlightAuthor: (personKey: string | null) => void
+  onManagePeople: () => void
 }
 
 /** Most active authors shown up front; the rest sit behind a "+N more" toggle. */
 const VISIBLE_AUTHORS = 8
 
-export function SummaryStrip({ graph, slots, highlightedAuthor, onHighlightAuthor }: SummaryStripProps) {
+export function SummaryStrip({
+  graph,
+  slots,
+  highlightedAuthor,
+  onHighlightAuthor,
+  onManagePeople,
+}: SummaryStripProps) {
   const [expanded, setExpanded] = useState(false)
   const { summary } = graph
   const hidden = graph.authors.length - VISIBLE_AUTHORS
@@ -39,16 +46,15 @@ export function SummaryStrip({ graph, slots, highlightedAuthor, onHighlightAutho
         aria-label="Commits per author"
       >
         {shown.map((author) => {
-          const email = author.email.toLowerCase()
-          const active = highlightedAuthor === email
+          const active = highlightedAuthor === author.key
           return (
             <button
-              key={email}
+              key={author.key}
               type="button"
               className={`author-chip${active ? ' is-active' : ''}`}
-              style={{ '--node-color': authorColor(slots, author.email) } as CSSProperties}
-              onClick={() => onHighlightAuthor(active ? null : email)}
-              title={`${author.name} <${author.email}> · click to ${active ? 'show everyone' : 'highlight their commits'}`}
+              style={{ '--node-color': authorColor(slots, author.key) } as CSSProperties}
+              onClick={() => onHighlightAuthor(active ? null : author.key)}
+              title={`${author.name}${author.login ? ` (@${author.login})` : ''} · click to ${active ? 'show everyone' : 'highlight their commits'}`}
               aria-pressed={active}
             >
               <span className="chip-dot" aria-hidden>
@@ -64,6 +70,14 @@ export function SummaryStrip({ graph, slots, highlightedAuthor, onHighlightAutho
             {expanded ? 'Show fewer' : `+${hidden} more`}
           </button>
         )}
+        <button
+          type="button"
+          className="more-button"
+          onClick={onManagePeople}
+          title="See every identity each person committed with, and merge any the app missed"
+        >
+          People…
+        </button>
       </div>
     </section>
   )

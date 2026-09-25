@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     github_pat: SecretStr = SecretStr("")
     cache_dir: Path = REPO_ROOT / ".cache" / "repos"
+    identity_dir: Path = REPO_ROOT / ".cache" / "identities"
     max_commits: int = 2000
 
     @property

@@ -14,7 +14,7 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
   return (
     <div className={classes.join(' ')} style={{ '--node-color': data.color } as CSSProperties}>
       <Handle type="target" position={Position.Left} isConnectable={false} />
-      <div className="commit-dot" aria-label={`Commit ${commit.short_sha} by ${commit.author_name}`}>
+      <div className="commit-dot" aria-label={`Commit ${commit.short_sha} by ${commit.author.name}`}>
         {data.initials}
       </div>
       <Handle type="source" position={Position.Right} isConnectable={false} />
@@ -35,7 +35,7 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
       <div className="commit-tooltip" role="tooltip">
         <strong>{commit.subject}</strong>
         <span>
-          {commit.author_name} · {formatDateTime(commit.authored_at)}
+          {commit.author.name} · {formatDateTime(commit.authored_at)}
         </span>
         {commit.hidden_parent_count > 0 && (
           <span className="muted">Parent commit is older than the time window</span>

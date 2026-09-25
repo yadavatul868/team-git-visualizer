@@ -16,12 +16,17 @@ from pathlib import Path
 
 import pytest
 
+from app.identity import GitHubUser, PeopleIndex, collect_identities, resolve_people
 from app.sync import fetch_repo
 
 AUTHORS = {
     "alice": ("Alice Admin", "alice@example.com"),
     "bob": ("Bob Builder", "bob@example.com"),
     "carol": ("Carol Coder", "carol@example.com"),
+    # The same people under other identities, as happens in real repos:
+    "bob-home": ("Bob Builder", "bob@home.example"),  # personal email, same name
+    "bob-laptop": ("Your Name", "bob@laptop.local"),  # git's placeholder name
+    "carol-web": ("carol-c", "4242+carol-c@users.noreply.github.com"),  # GitHub web merge
 }
 START = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 
@@ -111,10 +116,10 @@ def build_team_repo(path: Path) -> RepoBuilder:
     repo.merge("alice", "feat/login", "Merge branch 'feat/login' into dev")
 
     repo.switch("feat-old", create=True)
-    repo.commit("bob", "Add old export", {"export.py": "def export():\n    pass\n"})
-    repo.commit("bob", "Tweak export", {"export.py": "def export():\n    return []\n"})
+    repo.commit("bob-laptop", "Add old export", {"export.py": "def export():\n    pass\n"})
+    repo.commit("bob-home", "Tweak export", {"export.py": "def export():\n    return []\n"})
     repo.switch("dev")
-    repo.merge("carol", "feat-old", "Merge pull request #7 from acme/feat-old")
+    repo.merge("carol-web", "feat-old", "Merge pull request #7 from acme/feat-old")
     repo.git("branch", "-D", "feat-old")
     repo.commit("alice", "Add report export (#12)", {"report.py": "def report():\n    pass\n"})
 
@@ -149,3 +154,12 @@ def cache_dir(tmp_path_factory: pytest.TempPathFactory, team_repo: RepoBuilder) 
 @pytest.fixture(scope="session")
 def cached_repo(cache_dir: Path) -> Iterator[Path]:
     yield cache_dir / "acme__demo.git"
+
+
+# What GitHub would answer for Carol's work email: it belongs to the account `carol-c`.
+GITHUB_ACCOUNTS = {"carol@example.com": GitHubUser(login="carol-c", name="Carol Coder")}
+
+
+@pytest.fixture(scope="session")
+def people(cached_repo: Path) -> PeopleIndex:
+    return resolve_people(collect_identities(cached_repo), GITHUB_ACCOUNTS, [])

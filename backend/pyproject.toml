@@ -5,6 +5,7 @@ description = "FastAPI backend for Team Git Visualizer"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.141.1",
+    "httpx>=0.28.1",
     "pydantic-settings>=2.13.1",
 ]
 

@@ -121,6 +121,7 @@ frontend/  package.json, vite.config.ts, src/{App.tsx, api.ts, types.ts,
 ## 7. Milestones (each: feature branch off `dev` → PR into `dev`)
 - [x] **M1 `feature/backend`** — scaffold, config, safe git runner, sync, graph, commit and edge endpoints, fixture and tests
 - [x] **M2 + M3 + M4 `feature/frontend-graph`** — top bar, summary strip, graph panel (lanes, zoom, pan, minimap, date ruler), node and edge detail views, loading/empty/error states, README, `dev.sh` *(combined into one branch so the first reviewable version is complete)*
+- [x] **v1.1 `feature/identity`** — one name per person across git identities
 - [ ] **Review with user** → collect missing fields → plan **v2 (protocol checks + fix instructions)**
 
 ## Review
@@ -153,3 +154,21 @@ frontend/  package.json, vite.config.ts, src/{App.tsx, api.ts, types.ts,
   and zooms smoothly; deleted branches get lanes from merge messages. It exposed the author-chip overflow
   and the label pile-up, both fixed
 - `npm run build` + `oxlint` clean; backend still 47/47
+
+### v1.1 — identity resolution (done)
+- **Problem (seen on real data):** the same person appeared as "Atul Yadav" (local commits) and
+  "yadavatul868" (GitHub web merges use the account's name and noreply email)
+- **Rule:** identities are joined (union-find, transitive) by GitHub account (batched GraphQL lookup
+  per new email at sync, cached 7 days; the noreply address also parsed offline), same email, same
+  full name (at least 2 words, placeholders ignored), or a manual link. Display name: GitHub profile
+  name, then the most-used real name, then the login
+- Backend: `identity.py`, `/api/people`, `/api/people/link`, `/api/people/unlink`; graph, commit and
+  edge responses carry a `PersonRef`, and the raw git identity is kept alongside it
+- Frontend: chips, colours, initials and highlighting keyed by person; details show
+  "Atul Yadav @yadavatul868, as <identity used>"; **People…** dialog to review identities and merge or
+  unmerge manually; colour slots reclaimed from stale keys
+- Verified: this repo → 1 person with 10 commits (both emails confirmed by GitHub); `pallets/flask` →
+  896 identities → 833 people (56 multi-identity people), first sync about 25s, later syncs only
+  look up new emails
+- Tests: 68 backend tests (18 new: name/noreply rules, transitive links, placeholders, GitHub
+  batching with a mocked API, error tolerance, store re-check, API link/unlink); build + lint clean

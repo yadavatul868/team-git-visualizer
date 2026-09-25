@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.git_runner import GitError, run_git
+from app.identity import IdentityStore, refresh_github_identities
 from app.models import BranchInfo, RepoSnapshot
 
 FETCH_TIMEOUT_S = 600.0
@@ -169,8 +170,10 @@ def read_snapshot(ref: RepoRef, path: Path) -> RepoSnapshot:
     )
 
 
-def sync_repo(url: str, cache_dir: Path, token: str | None) -> RepoSnapshot:
-    """Clone or refresh the repo at `url` and return its current branches."""
+def sync_repo(
+    url: str, cache_dir: Path, token: str | None, identities: IdentityStore
+) -> RepoSnapshot:
+    """Clone or refresh the repo at `url`, resolve new author emails, return its branches."""
     ref = parse_github_url(url)
     path = ref.cache_path(cache_dir)
     with _repo_lock(path):
@@ -183,6 +186,7 @@ def sync_repo(url: str, cache_dir: Path, token: str | None) -> RepoSnapshot:
                     "isn't set or can't read it."
                 ) from exc
             raise
+        refresh_github_identities(path, ref.owner, ref.name, token, identities)
         return read_snapshot(ref, path)
 
 
