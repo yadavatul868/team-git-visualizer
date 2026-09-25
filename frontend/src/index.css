@@ -1,24 +1,31 @@
-/* Tokens: chart chrome + categorical author palette from the dataviz reference palette.
-   Dark mode uses its own validated steps, not an automatic inversion. */
+/* Theme: deep navy + bright link blue, light cyan tints, warm off-white page, orange call to
+   action, serif headings. Author dots keep the validated categorical palette (dataviz reference)
+   so people stay distinguishable; dark mode uses its own navy-based steps. */
 :root {
   color-scheme: light;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
+  --page: #faf8f2;
+  --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-sunken: #f3f2ee;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #6f6d67;
-  --gridline: #e1e0d9;
-  --baseline: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
-  --edge: #a9a79f;
-  --edge-strong: #52514e;
-  --accent: #2a78d6;
-  --accent-soft: rgba(42, 120, 214, 0.12);
-  --lane-band: rgba(11, 11, 11, 0.025);
-  --minimap-mask: rgba(249, 249, 247, 0.7);
-  --shadow: 0 8px 24px rgba(11, 11, 11, 0.12);
+  --surface-sunken: #f4f1ea;
+  --text-primary: #1a1c21;
+  --text-secondary: #4b4d4f;
+  --text-muted: #6d6f70;
+  --heading: #002677;
+  --gridline: #e5e2da;
+  --baseline: #c8c4b8;
+  --border: rgba(0, 38, 119, 0.14);
+  --edge: #9aa3b8;
+  --edge-strong: #002677;
+  --brand: #002677;
+  --brand-tint: #d9f6fa;
+  --link: #196ecf;
+  --accent: #196ecf;
+  --accent-soft: rgba(25, 110, 207, 0.12);
+  --cta: #d74120;
+  --cta-hover: #b8361a;
+  --lane-band: rgba(0, 38, 119, 0.03);
+  --minimap-mask: rgba(250, 248, 242, 0.7);
+  --shadow: 0 8px 24px rgba(0, 38, 119, 0.14);
 
   --success-text: #006300;
   --critical: #d03b3b;
@@ -35,6 +42,7 @@
   --author-other: #898781;
 
   --sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --serif: Georgia, 'Times New Roman', serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font: 14px/1.45 var(--sans);
   color: var(--text-primary);
@@ -45,22 +53,26 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --surface-raised: #232322;
-    --surface-sunken: #141413;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #9a988f;
-    --gridline: #2c2c2a;
-    --baseline: #383835;
-    --border: rgba(255, 255, 255, 0.1);
-    --edge: #5e5d58;
-    --edge-strong: #c3c2b7;
-    --accent: #3987e5;
-    --accent-soft: rgba(57, 135, 229, 0.18);
-    --lane-band: rgba(255, 255, 255, 0.025);
-    --minimap-mask: rgba(13, 13, 13, 0.7);
+    --page: #06112b;
+    --surface: #0c1a3d;
+    --surface-raised: #13244d;
+    --surface-sunken: #091533;
+    --text-primary: #f2f5fb;
+    --text-secondary: #c2cbe0;
+    --text-muted: #8e9abb;
+    --heading: #ffffff;
+    --gridline: #1e2e57;
+    --baseline: #2d3f6d;
+    --border: rgba(255, 255, 255, 0.12);
+    --edge: #4a5a85;
+    --edge-strong: #c2cbe0;
+    --brand: #9cc2ff;
+    --brand-tint: #0f2c5c;
+    --link: #6fa8ff;
+    --accent: #6fa8ff;
+    --accent-soft: rgba(111, 168, 255, 0.18);
+    --lane-band: rgba(255, 255, 255, 0.03);
+    --minimap-mask: rgba(6, 17, 43, 0.7);
     --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 
     --success-text: #0ca30c;
@@ -90,7 +102,12 @@ select {
   color: inherit;
 }
 a {
-  color: var(--accent);
+  color: var(--link);
+  font-weight: 600;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
 }
 code,
 .mono {
@@ -136,28 +153,34 @@ code,
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 20px;
+  margin-bottom: 12px;
   padding: 12px 16px;
+  border-top: 6px solid var(--brand-tint);
+  border-bottom: 1px solid var(--gridline);
+  background: var(--surface);
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 650;
-  font-size: 15px;
+  gap: 10px;
+  color: var(--heading);
+  font: 700 19px/1.2 var(--serif);
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 16px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--brand);
+  color: var(--surface);
+  font: 17px var(--sans);
 }
 .repo-form {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex: 1 1 420px;
@@ -166,15 +189,19 @@ code,
 .repo-input,
 .field input,
 .field select {
-  height: 32px;
+  height: 34px;
   padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--text-muted);
+  border-radius: 6px;
   background: var(--surface-raised);
 }
 .repo-input {
   flex: 1;
-  min-width: 0;
+  min-width: 260px;
+  height: 38px;
+  padding: 0 16px;
+  border: 2px solid var(--brand);
+  border-radius: 999px;
 }
 .repo-input:focus,
 .field input:focus,
@@ -186,26 +213,27 @@ code,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-raised);
+  height: 38px;
+  padding: 0 18px;
+  border: 2px solid var(--brand);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--brand);
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
 }
 .button:hover:not(:disabled) {
-  background: var(--surface-sunken);
+  background: var(--brand-tint);
 }
 .button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--cta);
+  border-color: var(--cta);
   color: #fff;
-  font-weight: 600;
 }
 .button.primary:hover:not(:disabled) {
-  background: var(--accent);
-  filter: brightness(1.08);
+  background: var(--cta-hover);
+  border-color: var(--cta-hover);
 }
 .button:disabled {
   opacity: 0.5;
@@ -234,8 +262,9 @@ code,
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-secondary);
+  color: var(--heading);
   font-size: 12.5px;
+  font-weight: 700;
 }
 .field input {
   width: 170px;
@@ -282,8 +311,8 @@ code,
   color: var(--text-secondary);
 }
 .stat strong {
-  color: var(--text-primary);
-  font-size: 16px;
+  color: var(--heading);
+  font: 700 20px var(--serif);
   font-variant-numeric: tabular-nums;
 }
 .stats-window {
@@ -308,14 +337,15 @@ code,
 .more-button {
   height: 28px;
   padding: 0 10px;
-  border: 1px dashed var(--baseline);
+  border: 1.5px solid var(--brand);
   border-radius: 999px;
   background: none;
-  color: var(--text-secondary);
+  color: var(--brand);
+  font-weight: 700;
   cursor: pointer;
 }
 .more-button:hover {
-  background: var(--surface-sunken);
+  background: var(--brand-tint);
 }
 .author-chip {
   display: inline-flex;
@@ -435,6 +465,7 @@ code,
   font-weight: 600;
 }
 .lane-name {
+  color: var(--heading);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -681,9 +712,8 @@ code,
 }
 .details-title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.4;
+  color: var(--heading);
+  font: 700 19px/1.35 var(--serif);
   overflow-wrap: anywhere;
 }
 .commit-body {
@@ -731,8 +761,9 @@ code,
   margin: 6px 0 0;
   padding-top: 12px;
   border-top: 1px solid var(--gridline);
-  font-size: 13px;
-  font-weight: 650;
+  color: var(--heading);
+  font-size: 13.5px;
+  font-weight: 700;
 }
 .commit-link {
   display: flex;
@@ -751,7 +782,8 @@ code,
 }
 .commit-link .mono {
   flex: none;
-  color: var(--accent);
+  color: var(--link);
+  font-weight: 600;
 }
 .commit-link-subject {
   overflow: hidden;
@@ -764,10 +796,10 @@ code,
   list-style: none;
 }
 .edge-kind-badge {
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--brand-tint);
+  color: var(--heading);
 }
 .edge-ends {
   display: grid;
@@ -879,9 +911,10 @@ code,
   color: var(--text-secondary);
 }
 .welcome h1 {
-  margin: 0 0 8px;
-  color: var(--text-primary);
-  font-size: 22px;
+  margin: 0 0 12px;
+  color: var(--heading);
+  font: 700 36px/1.15 var(--serif);
+  letter-spacing: -0.015em;
 }
 
 /* ---------- People dialog ---------- */
@@ -908,7 +941,8 @@ code,
 }
 .dialog-header h2 {
   margin: 0;
-  font-size: 17px;
+  color: var(--heading);
+  font: 700 22px var(--serif);
 }
 .dialog-intro {
   margin: 0 0 12px;
@@ -951,8 +985,9 @@ code,
   background: var(--surface);
 }
 .button.small {
-  height: 26px;
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 10px;
+  border-width: 1.5px;
   font-size: 12px;
 }
 .identity-used {
