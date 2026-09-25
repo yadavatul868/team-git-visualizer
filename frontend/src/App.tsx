@@ -1,122 +1,190 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
-function App() {
-  const [count, setCount] = useState(0)
+import { api } from './api'
+import { DetailsPanel } from './components/DetailsPanel'
+import { GraphPanel } from './components/GraphPanel'
+import { SummaryStrip } from './components/SummaryStrip'
+import { TopBar } from './components/TopBar'
+import { assignAuthorSlots } from './lib/colors'
+import { load, save } from './lib/storage'
+import type { Graph, Selection } from './types'
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+const GITHUB_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+function repoKeyFromUrl(url: string): string | null {
+  const match = GITHUB_URL_RE.exec(url.trim())
+  return match ? `${match[1]}/${match[2]}` : null
 }
 
-export default App
+const priorityKey = (repo: string) => `tgv:priority:${repo.toLowerCase()}`
+const parsePriority = (value: string) =>
+  value
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
+
+export default function App() {
+  const [url, setUrl] = useState(() => load('tgv:url', ''))
+  const [repo, setRepo] = useState<string | null>(() => repoKeyFromUrl(load('tgv:url', '')))
+  const [days, setDays] = useState(() => load('tgv:days', 30))
+  const [priority, setPriority] = useState(() => {
+    const saved = repoKeyFromUrl(load('tgv:url', ''))
+    return saved ? load(priorityKey(saved), '') : ''
+  })
+  const [result, setResult] = useState<{ key: string; graph: Graph | null } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [tokenMissing, setTokenMissing] = useState(false)
+  const [selection, setSelection] = useState<Selection | null>(null)
+  const [focusSha, setFocusSha] = useState<string | null>(null)
+  const [highlightedAuthor, setHighlightedAuthor] = useState<string | null>(null)
+  const [graphVersion, setGraphVersion] = useState(0)
+
+  useEffect(() => {
+    api
+      .health()
+      .then((health) => setTokenMissing(!health.token_configured))
+      .catch(() => setError('Can’t reach the backend. Is it running? Start everything with ./dev.sh'))
+  }, [])
+
+  // (Re)load the graph from the backend's local copy whenever the repo, window or priority changes.
+  const requestKey = repo ? `${repo}|${days}|${priority}|${graphVersion}` : null
+  useEffect(() => {
+    if (!repo || !requestKey) return
+    const controller = new AbortController()
+    api
+      .graph(repo, days, parsePriority(priority), controller.signal)
+      .then((next) => {
+        setResult({ key: requestKey, graph: next })
+        setError(null)
+      })
+      .catch((err: Error) => {
+        if (err.name === 'AbortError') return
+        setResult({ key: requestKey, graph: null })
+        // A repo that was never synced on this machine just needs a Load; not an error worth shouting.
+        if (!err.message.includes("hasn't been loaded")) setError(err.message)
+      })
+    return () => controller.abort()
+  }, [repo, days, priority, requestKey])
+
+  const loadingGraph = requestKey !== null && result?.key !== requestKey
+  // Keep showing the current graph while a new window/priority loads, but never another repo's.
+  const graph = result?.graph && result.graph.repo.toLowerCase() === repo?.toLowerCase() ? result.graph : null
+
+  /** Fetch the latest snapshot from GitHub (clones on first use), then reload the graph. */
+  const sync = async (targetUrl: string) => {
+    setSyncing(true)
+    setError(null)
+    try {
+      const snapshot = await api.sync(targetUrl)
+      save('tgv:url', targetUrl.trim())
+      if (repo?.toLowerCase() !== snapshot.repo.toLowerCase()) {
+        setRepo(snapshot.repo)
+        setPriority(load(priorityKey(snapshot.repo), ''))
+        setSelection(null)
+        setHighlightedAuthor(null)
+      }
+      setGraphVersion((version) => version + 1)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const slots = useMemo(
+    () => (graph ? assignAuthorSlots(graph.repo, graph.authors.map((author) => author.email)) : {}),
+    [graph],
+  )
+
+  const selectCommit = useCallback((sha: string) => {
+    setSelection({ type: 'node', sha })
+    setFocusSha(sha)
+  }, [])
+
+  return (
+    <div className="app">
+      <TopBar
+        key={repo ?? ''}
+        url={url}
+        onUrlChange={setUrl}
+        onLoad={() => sync(url)}
+        onRefresh={() => sync(url)}
+        canRefresh={repo !== null && repoKeyFromUrl(url)?.toLowerCase() === repo.toLowerCase()}
+        syncing={syncing}
+        fetchedAt={graph?.fetched_at ?? null}
+        days={days}
+        onDaysChange={(value) => {
+          setDays(value)
+          save('tgv:days', value)
+        }}
+        priority={priority}
+        onPriorityChange={(value) => {
+          setPriority(value)
+          if (repo) save(priorityKey(repo), value)
+        }}
+      />
+
+      {tokenMissing && (
+        <div className="banner warning">
+          No <code>GITHUB_PAT</code> in <code>.env</code>. Only public repos can be loaded.
+        </div>
+      )}
+      {error && (
+        <div className="banner error" role="alert">
+          {error}
+          <button type="button" className="banner-close" onClick={() => setError(null)} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
+
+      {graph ? (
+        <SummaryStrip
+          graph={graph}
+          slots={slots}
+          highlightedAuthor={highlightedAuthor}
+          onHighlightAuthor={setHighlightedAuthor}
+        />
+      ) : null}
+
+      <main className={`workspace${loadingGraph ? ' is-loading' : ''}`}>
+        {graph && graph.nodes.length > 0 ? (
+          <>
+            <GraphPanel
+              graph={graph}
+              slots={slots}
+              selection={selection}
+              highlightedAuthor={highlightedAuthor}
+              focusSha={focusSha}
+              onSelect={setSelection}
+            />
+            <DetailsPanel
+              repo={graph.repo}
+              graph={graph}
+              slots={slots}
+              selection={selection}
+              onSelectCommit={selectCommit}
+            />
+          </>
+        ) : (
+          <div className="welcome">
+            {graph ? (
+              <p>No commits in this time window. Try a longer window.</p>
+            ) : syncing || loadingGraph ? (
+              <p className="muted">Loading…</p>
+            ) : (
+              <>
+                <h1>See what your team is doing in git</h1>
+                <p>
+                  Paste a GitHub repository URL above and press <strong>Load</strong>. Every branch, commit
+                  and merge appears as a graph; click anything for details.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}

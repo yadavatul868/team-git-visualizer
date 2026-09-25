@@ -1,0 +1,216 @@
+import {
+  Controls,
+  MiniMap,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  useViewport,
+  type EdgeMouseHandler,
+  type NodeMouseHandler,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
+import { useEffect, useMemo, useRef } from 'react'
+
+import type { AuthorSlots } from '../lib/colors'
+import { dayKey, formatDay } from '../lib/format'
+import {
+  COLUMN_WIDTH,
+  LANE_HEIGHT,
+  ORIGIN_X,
+  commitCenter,
+  toFlowEdges,
+  toFlowNodes,
+  type CommitFlowNode,
+  type GitFlowEdge,
+} from '../lib/layout'
+import type { Graph, Selection } from '../types'
+import { CommitNode } from './CommitNode'
+import { GitEdge } from './GitEdge'
+
+const nodeTypes = { commit: CommitNode }
+const edgeTypes = { git: GitEdge }
+const RULER_HEIGHT = 34
+/** Screen x of the oldest commit when the whole graph fits: just right of the lane labels. */
+const FIRST_COMMIT_LEFT = 240
+const RIGHT_PADDING = 110
+const MIN_FIT_ZOOM = 0.6
+const MIN_LABEL_GAP = 26
+const MIN_DAY_GAP = 84
+const LANE_KIND_LABEL: Record<string, string> = {
+  default: 'default',
+  deleted: 'deleted',
+  unlabelled: 'unknown',
+}
+
+interface GraphPanelProps {
+  graph: Graph
+  slots: AuthorSlots
+  selection: Selection | null
+  highlightedAuthor: string | null
+  focusSha: string | null
+  onSelect: (selection: Selection | null) => void
+}
+
+export function GraphPanel(props: GraphPanelProps) {
+  return (
+    <ReactFlowProvider>
+      <GraphCanvas {...props} />
+    </ReactFlowProvider>
+  )
+}
+
+function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onSelect }: GraphPanelProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const { setViewport, setCenter, getZoom } = useReactFlow()
+  const nodes = useMemo(
+    () => toFlowNodes(graph, slots, selection, highlightedAuthor),
+    [graph, slots, selection, highlightedAuthor],
+  )
+  const edges = useMemo(() => toFlowEdges(graph, selection), [graph, selection])
+
+  // On each newly loaded graph: fit everything if that keeps commits readable (zoom ≥ 0.6),
+  // otherwise show the newest commits at full size. Either way, clear the lane labels.
+  useEffect(() => {
+    const width = containerRef.current?.clientWidth ?? 1000
+    const span = Math.max(1, graph.nodes.length - 1) * COLUMN_WIDTH
+    const fitZoom = Math.min(1, (width - FIRST_COMMIT_LEFT - RIGHT_PADDING) / span)
+    const zoom = fitZoom >= MIN_FIT_ZOOM ? fitZoom : 1
+    const x =
+      fitZoom >= MIN_FIT_ZOOM
+        ? FIRST_COMMIT_LEFT - ORIGIN_X * zoom
+        : width - RIGHT_PADDING - (ORIGIN_X + span) * zoom
+    setViewport({ x, y: RULER_HEIGHT + LANE_HEIGHT * 0.75, zoom })
+  }, [graph, setViewport])
+
+  // Centre on a commit when asked (e.g. a parent clicked in the details panel).
+  useEffect(() => {
+    const commit = focusSha ? graph.nodes.find((node) => node.sha === focusSha) : undefined
+    if (!commit) return
+    const center = commitCenter(commit)
+    setCenter(center.x, center.y, { zoom: Math.max(getZoom(), 0.8), duration: 400 })
+  }, [focusSha, graph, setCenter, getZoom])
+
+  const onNodeClick: NodeMouseHandler<CommitFlowNode> = (_, node) =>
+    onSelect({ type: 'node', sha: node.id })
+  const onEdgeClick: EdgeMouseHandler<GitFlowEdge> = (_, edge) =>
+    onSelect({ type: 'edge', id: edge.id, source: edge.source, target: edge.target })
+
+  return (
+    <div className="graph-panel" ref={containerRef}>
+      <LaneBands graph={graph} />
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
+        onPaneClick={() => onSelect(null)}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        minZoom={0.1}
+        maxZoom={2.5}
+        colorMode="system"
+        proOptions={{ hideAttribution: true }}
+      >
+        <Controls showInteractive={false} position="bottom-left" />
+        <MiniMap
+          pannable
+          zoomable
+          position="bottom-right"
+          nodeClassName={(node) => (node.className ?? '') + ' minimap-node'}
+          nodeBorderRadius={20}
+          maskColor="var(--minimap-mask)"
+        />
+      </ReactFlow>
+      <DateRuler graph={graph} />
+      <LaneLabels graph={graph} />
+    </div>
+  )
+}
+
+/** Alternating lane stripes and day separators, drawn behind the graph and kept in sync with it. */
+function LaneBands({ graph }: { graph: Graph }) {
+  const { x, y, zoom } = useViewport()
+  return (
+    <div className="lane-bands" aria-hidden>
+      {graph.lanes.map((lane) => (
+        <div
+          key={lane.id}
+          className={`lane-band${lane.id % 2 ? ' is-odd' : ''}`}
+          style={{ top: y + (lane.id - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
+        />
+      ))}
+      {dayBoundaries(graph).map(({ x: graphX, key }) => (
+        <div key={key} className="day-line" style={{ left: x + graphX * zoom }} />
+      ))}
+    </div>
+  )
+}
+
+/** Branch names pinned to the left edge, following the lanes as you pan and zoom vertically. */
+function LaneLabels({ graph }: { graph: Graph }) {
+  const { y, zoom } = useViewport()
+  const visible = skipCrowded(graph.lanes, (lane) => y + lane.id * LANE_HEIGHT * zoom, MIN_LABEL_GAP)
+  return (
+    <div className="lane-labels">
+      {visible.map(({ item: lane, position }) => (
+        <div
+          key={lane.id}
+          className={`lane-label kind-${lane.kind}`}
+          style={{ top: position }}
+          title={`${lane.name} · ${lane.commit_count} commit${lane.commit_count === 1 ? '' : 's'} in this lane`}
+        >
+          <span className="lane-name">{lane.name}</span>
+          {LANE_KIND_LABEL[lane.kind] && (
+            <span className="lane-kind">{LANE_KIND_LABEL[lane.kind]}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Day labels along the top, marking where each calendar day starts. */
+function DateRuler({ graph }: { graph: Graph }) {
+  const { x, zoom } = useViewport()
+  const visible = skipCrowded(dayBoundaries(graph), (day) => x + day.x * zoom, MIN_DAY_GAP)
+  return (
+    <div className="date-ruler" aria-hidden style={{ height: RULER_HEIGHT }}>
+      {visible.map(({ item: day, position }) => (
+        <span key={day.key} className="day-tick" style={{ left: position }}>
+          {day.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** Keep items at least `gap` px apart on screen (in order), so labels never pile up when zoomed out. */
+function skipCrowded<T>(items: T[], positionOf: (item: T) => number, gap: number) {
+  const kept: { item: T; position: number }[] = []
+  for (const item of items) {
+    const position = positionOf(item)
+    const previous = kept.at(-1)
+    if (!previous || position - previous.position >= gap) kept.push({ item, position })
+  }
+  return kept
+}
+
+function dayBoundaries(graph: Graph): { x: number; key: string; label: string }[] {
+  const boundaries = []
+  let previous = ''
+  for (const node of graph.nodes) {
+    const key = dayKey(node.committed_at)
+    if (key !== previous) {
+      boundaries.push({
+        x: ORIGIN_X + (node.x - 0.5) * COLUMN_WIDTH,
+        key,
+        label: formatDay(node.committed_at),
+      })
+      previous = key
+    }
+  }
+  return boundaries
+}
