@@ -8,6 +8,7 @@ import { SummaryStrip } from './components/SummaryStrip'
 import { TopBar } from './components/TopBar'
 import { assignAuthorSlots } from './lib/colors'
 import { load, save } from './lib/storage'
+import { applyTheme, savedTheme, type Theme } from './lib/theme'
 import type { Graph, Selection } from './types'
 
 const GITHUB_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/
@@ -41,6 +42,7 @@ export default function App() {
   const [highlightedAuthor, setHighlightedAuthor] = useState<string | null>(null)
   const [graphVersion, setGraphVersion] = useState(0)
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const [theme, setTheme] = useState<Theme>(savedTheme)
 
   useEffect(() => {
     api
@@ -127,6 +129,12 @@ export default function App() {
         }}
         repo={graph?.repo ?? repo}
         onManagePeople={graph ? () => setPeopleOpen(true) : null}
+        theme={theme}
+        onToggleTheme={() => {
+          const next = theme === 'light' ? 'dark' : 'light'
+          applyTheme(next)
+          setTheme(next)
+        }}
       />
 
       {tokenMissing && (
@@ -173,6 +181,7 @@ export default function App() {
               highlightedAuthor={highlightedAuthor}
               focusSha={focusSha}
               onSelect={setSelection}
+              theme={theme}
             />
             <DetailsPanel
               repo={graph.repo}

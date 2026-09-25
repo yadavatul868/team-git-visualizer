@@ -25,6 +25,7 @@ import {
   type CommitFlowNode,
   type GitFlowEdge,
 } from '../lib/layout'
+import type { Theme } from '../lib/theme'
 import type { Graph, Selection } from '../types'
 import { CommitNode } from './CommitNode'
 import { GitEdge } from './GitEdge'
@@ -50,6 +51,7 @@ interface GraphPanelProps {
   highlightedAuthor: string | null
   focusSha: string | null
   onSelect: (selection: Selection | null) => void
+  theme: Theme
 }
 
 export function GraphPanel(props: GraphPanelProps) {
@@ -60,7 +62,15 @@ export function GraphPanel(props: GraphPanelProps) {
   )
 }
 
-function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onSelect }: GraphPanelProps) {
+function GraphCanvas({
+  graph,
+  slots,
+  selection,
+  highlightedAuthor,
+  focusSha,
+  onSelect,
+  theme,
+}: GraphPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { setViewport, setCenter, getZoom } = useReactFlow()
   const nodes = useMemo(
@@ -138,7 +148,7 @@ function GraphCanvas({ graph, slots, selection, highlightedAuthor, focusSha, onS
         elementsSelectable={false}
         minZoom={0.1}
         maxZoom={2.5}
-        colorMode="system"
+        colorMode={theme}
         proOptions={{ hideAttribution: true }}
       >
         <Controls showInteractive={false} showFitView={false} position="bottom-left">

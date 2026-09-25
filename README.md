@@ -41,6 +41,7 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 | **Window** | Last 7 / 30 / 90 days, or all history (capped at the newest 2,000 commits) |
 | **Branch priority** | Optional, e.g. `main, stage, dev`. These branches get the top lanes and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
 | Author chips | Click to highlight one person's commits |
+| ☾ Dark / ☀ Light | Theme switch, top left. The app always opens light; your choice is remembered in the browser. |
 | Graph | Scroll to zoom, drag to pan, click a dot or a line for details |
 | Fit view (⤢) | Zooms to show everything, but never smaller than about 7 branches tall. In bigger repos it shows the newest commits and the lanes around them. |
 

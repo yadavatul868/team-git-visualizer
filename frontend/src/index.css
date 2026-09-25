@@ -55,47 +55,46 @@
   -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --page: #06112b;
-    --surface: #0c1a3d;
-    --surface-raised: #13244d;
-    --surface-sunken: #091533;
-    --text-primary: #f2f5fb;
-    --text-secondary: #c2cbe0;
-    --text-muted: #8e9abb;
-    --heading: #ffffff;
-    --gridline: #1e2e57;
-    --baseline: #2d3f6d;
-    --border: rgba(255, 255, 255, 0.12);
-    --edge: #4a5a85;
-    --edge-strong: #c2cbe0;
-    --brand: #9cc2ff;
-    --brand-tint: #0f2c5c;
-    --banner: #0e2551;
-    --nav: #0a1f52;
-    --on-nav: #ffffff;
-    --card-border: rgba(255, 255, 255, 0.12);
-    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-    --link: #6fa8ff;
-    --accent: #6fa8ff;
-    --accent-soft: rgba(111, 168, 255, 0.18);
-    --lane-band: rgba(255, 255, 255, 0.03);
-    --minimap-mask: rgba(6, 17, 43, 0.7);
-    --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+/* Dark theme: opt-in via the switch in the top strip (light is the default). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #06112b;
+  --surface: #0c1a3d;
+  --surface-raised: #13244d;
+  --surface-sunken: #091533;
+  --text-primary: #f2f5fb;
+  --text-secondary: #c2cbe0;
+  --text-muted: #8e9abb;
+  --heading: #ffffff;
+  --gridline: #1e2e57;
+  --baseline: #2d3f6d;
+  --border: rgba(255, 255, 255, 0.12);
+  --edge: #4a5a85;
+  --edge-strong: #c2cbe0;
+  --brand: #9cc2ff;
+  --brand-tint: #0f2c5c;
+  --banner: #0e2551;
+  --nav: #0a1f52;
+  --on-nav: #ffffff;
+  --card-border: rgba(255, 255, 255, 0.12);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --link: #6fa8ff;
+  --accent: #6fa8ff;
+  --accent-soft: rgba(111, 168, 255, 0.18);
+  --lane-band: rgba(255, 255, 255, 0.03);
+  --minimap-mask: rgba(6, 17, 43, 0.7);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 
-    --success-text: #0ca30c;
+  --success-text: #0ca30c;
 
-    --author-1: #3987e5;
-    --author-2: #d95926;
-    --author-3: #199e70;
-    --author-4: #c98500;
-    --author-5: #d55181;
-    --author-6: #008300;
-    --author-7: #9085e9;
-    --author-8: #e66767;
-  }
+  --author-1: #3987e5;
+  --author-2: #d95926;
+  --author-3: #199e70;
+  --author-4: #c98500;
+  --author-5: #d55181;
+  --author-6: #008300;
+  --author-7: #9085e9;
+  --author-8: #e66767;
 }
 
 * {
@@ -164,7 +163,7 @@ code,
 .utility-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 16px;
   min-height: 34px;
   padding: 4px 24px;
@@ -172,6 +171,23 @@ code,
   color: var(--heading);
   font-size: 13px;
   font-weight: 600;
+}
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1.5px solid var(--brand);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.theme-toggle:hover {
+  background: var(--brand-tint);
 }
 .fetched-at {
   color: var(--text-secondary);
