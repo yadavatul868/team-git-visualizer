@@ -164,7 +164,7 @@ code,
 .utility-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   min-height: 34px;
   padding: 4px 24px;
@@ -172,9 +172,6 @@ code,
   color: var(--heading);
   font-size: 13px;
   font-weight: 600;
-}
-.utility-bar a {
-  color: var(--heading);
 }
 .fetched-at {
   color: var(--text-secondary);
@@ -240,9 +237,13 @@ code,
   color: var(--on-nav);
 }
 .nav-title {
+  color: var(--on-nav);
   font-size: 16px;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+a.nav-title:hover {
+  text-decoration: underline;
 }
 .view-controls {
   display: flex;

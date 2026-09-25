@@ -54,13 +54,6 @@ export function TopBar(props: TopBarProps) {
     <header className="site-header">
       {/* Utility strip */}
       <div className="utility-bar">
-        {props.repo ? (
-          <a href={`https://github.com/${props.repo}`} target="_blank" rel="noreferrer">
-            github.com/{props.repo} ↗
-          </a>
-        ) : (
-          <span>GitHub repository activity</span>
-        )}
         <span className="fetched-at">{status}</span>
       </div>
 
@@ -102,7 +95,19 @@ export function TopBar(props: TopBarProps) {
 
       {/* Navy navigation bar: view controls */}
       <nav className="nav-bar" aria-label="View">
-        <span className="nav-title">{props.repo ?? 'No repository loaded'}</span>
+        {props.repo ? (
+          <a
+            className="nav-title"
+            href={`https://github.com/${props.repo}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Open this repository on GitHub"
+          >
+            {props.repo} <span aria-hidden>↗</span>
+          </a>
+        ) : (
+          <span className="nav-title">No repository loaded</span>
+        )}
         <div className="view-controls">
           <label className="field">
             <span>Window</span>
