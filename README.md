@@ -79,4 +79,3 @@ cd frontend && npm run build && npm run lint          # type-check, build, lint
 
 - `backend/` is a FastAPI app. It keeps bare clones in `.cache/repos/` (git-ignored).
 - `frontend/` is React + Vite + React Flow. Vite proxies `/api` to the backend on :8000.
-- The plan and progress are in `tasks/todo.md`.
