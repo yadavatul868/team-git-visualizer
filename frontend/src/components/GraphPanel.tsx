@@ -20,6 +20,7 @@ import {
   ORIGIN_X,
   commitCenter,
   fitViewport,
+  laneViewport,
   toFlowEdges,
   toFlowNodes,
   type CommitFlowNode,
@@ -38,6 +39,8 @@ const FIRST_COMMIT_LEFT = 70
 const RIGHT_PADDING = 110
 const MIN_LABEL_GAP = 26
 const MIN_DAY_GAP = 84
+/** Jumping to a branch zooms in at least this far, so its commits are readable. */
+const MIN_JUMP_ZOOM = 0.7
 const LANE_KIND_LABEL: Record<string, string> = {
   default: 'default',
   deleted: 'deleted',
@@ -72,7 +75,8 @@ function GraphCanvas({
   theme,
 }: GraphPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { setViewport, setCenter, getZoom } = useReactFlow()
+  const { setViewport, setCenter, getZoom, getViewport } = useReactFlow()
+  const columnRef = useRef<HTMLElement>(null)
   const nodes = useMemo(
     () => toFlowNodes(graph, slots, selection, highlightedAuthor),
     [graph, slots, selection, highlightedAuthor],
@@ -117,6 +121,31 @@ function GraphCanvas({
     setCenter(center.x, center.y, { zoom: Math.max(getZoom(), 0.8), duration: 400 })
   }, [focusSha, graph, setCenter, getZoom])
 
+  /** Jump to a branch: its lane becomes the top row, its newest commit centred. */
+  const goToLane = (laneId: number) => {
+    userMoved.current = true
+    const zoom = Math.max(getZoom(), MIN_JUMP_ZOOM)
+    const width = containerRef.current?.clientWidth ?? 1000
+    void setViewport(laneViewport(graph, laneId, { width, top: RULER_HEIGHT }, zoom), {
+      duration: 350,
+    })
+  }
+  const defaultLane = graph.lanes.find((lane) => lane.kind === 'default')
+
+  // Scrolling over the branch column scrolls the diagram too (non-passive so the page stays put).
+  useEffect(() => {
+    const column = columnRef.current
+    if (!column) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      userMoved.current = true
+      const { x, y, zoom } = getViewport()
+      void setViewport({ x, y: y - event.deltaY, zoom })
+    }
+    column.addEventListener('wheel', onWheel, { passive: false })
+    return () => column.removeEventListener('wheel', onWheel)
+  }, [getViewport, setViewport])
+
   const onNodeClick: NodeMouseHandler<CommitFlowNode> = (_, node) =>
     onSelect({ type: 'node', sha: node.id })
   const onEdgeClick: EdgeMouseHandler<GitFlowEdge> = (_, edge) =>
@@ -124,10 +153,20 @@ function GraphCanvas({
 
   return (
     <div className="graph-panel">
-      <aside className="lane-column" aria-label="Branches">
-        <LaneLabels graph={graph} />
+      <aside className="lane-column" aria-label="Branches" ref={columnRef}>
+        <LaneLabels graph={graph} onSelectLane={goToLane} />
         <div className="lane-column-header" style={{ height: RULER_HEIGHT }}>
           Branches <span className="lane-count">{graph.lanes.length}</span>
+          {defaultLane && (
+            <button
+              type="button"
+              className="lane-home"
+              onClick={() => goToLane(defaultLane.id)}
+              title={`Center on the default branch (${defaultLane.name})`}
+            >
+              <span aria-hidden>⌂</span> {defaultLane.name}
+            </button>
+          )}
         </div>
       </aside>
       <div className="graph-canvas" ref={containerRef}>
@@ -140,6 +179,9 @@ function GraphCanvas({
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
         onPaneClick={() => onSelect(null)}
+        panOnScroll
+        panOnScrollSpeed={1}
+        zoomOnScroll={false}
         onMoveStart={(event) => {
           if (event) userMoved.current = true // null for programmatic moves
         }}
@@ -206,7 +248,13 @@ function LaneBands({ graph }: { graph: Graph }) {
 
 /** The fixed branch column: one row per lane, following the graph as you pan and zoom
  *  vertically, but never moving sideways, so names never cover commits. */
-function LaneLabels({ graph }: { graph: Graph }) {
+function LaneLabels({
+  graph,
+  onSelectLane,
+}: {
+  graph: Graph
+  onSelectLane: (laneId: number) => void
+}) {
   const { y, zoom } = useViewport()
   const visible = skipCrowded(graph.lanes, (lane) => y + lane.id * LANE_HEIGHT * zoom, MIN_LABEL_GAP)
   return (
@@ -220,17 +268,19 @@ function LaneLabels({ graph }: { graph: Graph }) {
         />
       ))}
       {visible.map(({ item: lane, position }) => (
-        <div
+        <button
+          type="button"
           key={lane.id}
           className={`lane-label kind-${lane.kind}`}
           style={{ top: position }}
-          title={`${lane.name} · ${lane.commit_count} commit${lane.commit_count === 1 ? '' : 's'} in this lane`}
+          onClick={() => onSelectLane(lane.id)}
+          title={`${lane.name} · ${lane.commit_count} commit${lane.commit_count === 1 ? '' : 's'} in this lane · click to jump to its latest commit`}
         >
           <span className="lane-name">{lane.name}</span>
           {LANE_KIND_LABEL[lane.kind] && (
             <span className="lane-kind">{LANE_KIND_LABEL[lane.kind]}</span>
           )}
-        </div>
+        </button>
       ))}
     </div>
   )

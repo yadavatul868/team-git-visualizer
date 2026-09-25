@@ -9,6 +9,7 @@ import { TopBar } from './components/TopBar'
 import { assignAuthorSlots } from './lib/colors'
 import { load, save } from './lib/storage'
 import { applyTheme, savedTheme, type Theme } from './lib/theme'
+import { DEFAULT_WINDOW, validWindow } from './lib/window'
 import type { Graph, RepoSuggestion, Selection } from './types'
 
 const GITHUB_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/
@@ -28,7 +29,7 @@ const parsePriority = (value: string) =>
 export default function App() {
   const [url, setUrl] = useState(() => load('tgv:url', ''))
   const [repo, setRepo] = useState<string | null>(() => repoKeyFromUrl(load('tgv:url', '')))
-  const [days, setDays] = useState(() => load('tgv:days', 30))
+  const [days, setDays] = useState(() => validWindow(load<unknown>('tgv:days', DEFAULT_WINDOW)))
   const [priority, setPriority] = useState(() => {
     const saved = repoKeyFromUrl(load('tgv:url', ''))
     return saved ? load(priorityKey(saved), '') : ''

@@ -48,7 +48,9 @@ export function DetailsPanel({ repo, graph, slots, selection, onSelectCommit }: 
     body = (
       <div className="empty-state">
         <p>Click a commit or a connection in the graph to see its details.</p>
-        <p className="muted">Scroll to zoom · drag to pan · click an author to highlight their work</p>
+        <p className="muted">
+          Scroll to move · pinch or ⌘ + scroll to zoom · click a branch name to jump to it
+        </p>
       </div>
     )
   } else if (error?.key === selectionKey(selection)) {
