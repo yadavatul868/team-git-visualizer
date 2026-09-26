@@ -126,15 +126,57 @@ def display_order(
     lanes: list[LaneAssignment],
     x_of: dict[str, int],
     priority: list[str],
+    lane_of: dict[str, int],
+    by_sha: dict[str, RawCommit],
 ) -> list[int]:
-    """Lane indices top to bottom: user priority, then the default branch, then by first commit."""
+    """Lane indices top to bottom, arranged as a family tree.
 
-    def key(index: int) -> tuple[int, int]:
-        lane = lanes[index]
-        if lane.kind in ("default", "branch") and lane.name in priority:
-            return (0, priority.index(lane.name))
-        if lane.kind == "default":
-            return (1, 0)
-        return (2, min(x_of[sha] for sha in lane.shas))
+    Each branch sits directly below the branch it was branched off from (the lane holding the
+    parent of its oldest commit), most recently branched first, so new work stays next to its
+    base. Branches of branches nest under their own parent. Roots, in order: the user's
+    priority branches, the default branch, then branches whose base is outside the time
+    window (oldest first).
+    """
+    first_x = {index: min(x_of[sha] for sha in lane.shas) for index, lane in enumerate(lanes)}
+    parent: dict[int, int] = {}
+    branched_at: dict[int, int] = {}
+    for index, lane in enumerate(lanes):
+        oldest = min(lane.shas, key=x_of.__getitem__)
+        parents = by_sha[oldest].parents
+        if parents and lane_of.get(parents[0], index) != index:
+            parent[index] = lane_of[parents[0]]
+            branched_at[index] = x_of[parents[0]]
 
-    return sorted(range(len(lanes)), key=key)
+    pinned = [
+        index
+        for name in dict.fromkeys(priority)
+        for index, lane in enumerate(lanes)
+        if lane.name == name and lane.kind in ("default", "branch")
+    ]
+    defaults = [i for i, lane in enumerate(lanes) if lane.kind == "default" and i not in pinned]
+    fixed_roots = pinned + defaults
+
+    children: dict[int, list[int]] = {}
+    for index, parent_index in parent.items():
+        if index not in fixed_roots:
+            children.setdefault(parent_index, []).append(index)
+    for siblings in children.values():
+        siblings.sort(key=lambda i: (-branched_at[i], -first_x[i]))  # most recent first
+    other_roots = sorted(
+        (i for i in range(len(lanes)) if i not in fixed_roots and i not in parent),
+        key=first_x.__getitem__,
+    )
+
+    order: list[int] = []
+    placed: set[int] = set()
+    # Iterative depth-first walk (repos can have hundreds of lanes); every lane is placed once.
+    for root in [*fixed_roots, *other_roots, *range(len(lanes))]:
+        stack = [root]
+        while stack:
+            index = stack.pop()
+            if index in placed:
+                continue
+            placed.add(index)
+            order.append(index)
+            stack.extend(reversed(children.get(index, [])))
+    return order

@@ -61,9 +61,12 @@ def test_default_heuristic_puts_each_commit_on_its_branch(graph: Graph) -> None:
     }
 
 
-def test_lanes_are_ordered_default_first_then_by_first_commit(graph: Graph) -> None:
+def test_lanes_are_ordered_as_a_family_tree(graph: Graph) -> None:
+    # main's children: stage (branched later) above dev; dev's children most recent first:
+    # feat-old (from the login merge), then feat/search and feat/login (both from "Set up dev
+    # config"; search's own work started later).
     assert [lane.name for lane in graph.lanes] == [
-        "main", "dev", "feat/login", "feat/search", "feat-old", "stage"
+        "main", "stage", "dev", "feat-old", "feat/search", "feat/login"
     ]  # fmt: skip
     kinds = {lane.name: lane.kind for lane in graph.lanes}
     assert kinds["main"] == "default"
@@ -135,3 +138,31 @@ def test_truncation_keeps_the_newest_commits(cached_repo: Path, people: PeopleIn
     assert graph.summary.commit_count == 5
     assert graph.nodes[-1].subject == "Merge branch 'stage' into main"
     assert all(edge.source in {n.sha for n in graph.nodes} for edge in graph.edges)
+
+
+def test_branches_sit_under_their_parent_most_recent_first() -> None:
+    """dev ← feat-a (early) ← sub-a, and dev ← feat-b (later)."""
+    from app.gitlog import RawCommit
+    from app.lanes import assign_lanes, display_order
+
+    def commit(sha: str, *parents: str) -> RawCommit:
+        return RawCommit(sha, parents, "A", "a@x.com", "", "", sha)
+
+    commits = [  # newest first, as git log returns
+        commit("b1", "d2"),
+        commit("s1", "a1"),
+        commit("d2", "d1"),
+        commit("a1", "d1"),
+        commit("d1", "m0"),
+        commit("m0"),
+    ]
+    tips = {"main": "m0", "dev": "d2", "feat-a": "a1", "feat-b": "b1", "sub-a": "s1"}
+    lanes, lane_of = assign_lanes(commits, tips, "main", [])
+    x_of = {c.sha: len(commits) - 1 - rank for rank, c in enumerate(commits)}
+    by_sha = {c.sha: c for c in commits}
+    order = display_order(lanes, x_of, [], lane_of, by_sha)
+    assert [lanes[i].name for i in order] == ["main", "dev", "feat-b", "feat-a", "sub-a"]
+
+    # A priority branch stays pinned at the top, with its own family below it.
+    order = display_order(lanes, x_of, ["feat-a"], lane_of, by_sha)
+    assert [lanes[i].name for i in order] == ["feat-a", "sub-a", "main", "dev", "feat-b"]

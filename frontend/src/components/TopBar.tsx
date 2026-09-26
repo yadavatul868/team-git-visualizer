@@ -202,7 +202,7 @@ export function TopBar(props: TopBarProps) {
           </label>
           <label
             className="field"
-            title="Branches listed here get the top lanes and win shared commits, e.g. main, stage, dev"
+            title="Branches listed here come first (each followed by the branches made from it) and win shared commits, e.g. main, stage, dev"
           >
             <span>Branch priority</span>
             <input
