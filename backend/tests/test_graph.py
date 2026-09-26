@@ -62,16 +62,12 @@ def test_default_heuristic_puts_each_commit_on_its_branch(graph: Graph) -> None:
 
 
 def test_lanes_are_ordered_as_a_family_tree(graph: Graph) -> None:
-    # main's children: stage (branched later) above dev; dev's children most recent first:
-    # feat-old (from the login merge), then feat/search and feat/login (both from "Set up dev
-    # config"; search's own work started later).
+    # Under main: stage and dev (both still integrating work), most recently active first.
+    # Under dev: feat/search is still open, so it's closest; the merged-back feat-old and
+    # feat/login move further away (most recently active first).
     assert [lane.name for lane in graph.lanes] == [
-        "main", "stage", "dev", "feat-old", "feat/search", "feat/login"
+        "main", "stage", "dev", "feat/search", "feat-old", "feat/login"
     ]  # fmt: skip
-    kinds = {lane.name: lane.kind for lane in graph.lanes}
-    assert kinds["main"] == "default"
-    assert kinds["feat-old"] == "deleted"
-    assert kinds["dev"] == "branch"
 
 
 def test_edge_kinds(graph: Graph, team_repo: RepoBuilder) -> None:
@@ -143,7 +139,7 @@ def test_truncation_keeps_the_newest_commits(cached_repo: Path, people: PeopleIn
 def test_branches_sit_under_their_parent_most_recent_first() -> None:
     """dev ← feat-a (early) ← sub-a, and dev ← feat-b (later)."""
     from app.gitlog import RawCommit
-    from app.lanes import assign_lanes, display_order
+    from app.lanes import assign_lanes, display_order, lane_bases
 
     def commit(sha: str, *parents: str) -> RawCommit:
         return RawCommit(sha, parents, "A", "a@x.com", "", "", sha)
@@ -160,7 +156,8 @@ def test_branches_sit_under_their_parent_most_recent_first() -> None:
     lanes, lane_of = assign_lanes(commits, tips, "main", [])
     x_of = {c.sha: len(commits) - 1 - rank for rank, c in enumerate(commits)}
     by_sha = {c.sha: c for c in commits}
-    order, tree_parent = display_order(lanes, x_of, [], lane_of, by_sha)
+    base, branched_at = lane_bases(lanes, x_of, lane_of, by_sha)
+    order, tree_parent = display_order(lanes, x_of, [], base, branched_at, settled=set())
     assert [lanes[i].name for i in order] == ["main", "dev", "feat-b", "feat-a", "sub-a"]
     names = {i: lane.name for i, lane in enumerate(lanes)}
     assert {names[c]: names[p] for c, p in tree_parent.items()} == {
@@ -171,7 +168,7 @@ def test_branches_sit_under_their_parent_most_recent_first() -> None:
     }
 
     # A priority branch stays pinned at the top, with its own family below it.
-    order, _ = display_order(lanes, x_of, ["feat-a"], lane_of, by_sha)
+    order, _ = display_order(lanes, x_of, ["feat-a"], base, branched_at, settled=set())
     assert [lanes[i].name for i in order] == ["feat-a", "sub-a", "main", "dev", "feat-b"]
 
 
@@ -200,3 +197,31 @@ def test_priority_branches_are_never_finished(cached_repo: Path, people: PeopleI
     graph = build_graph(cached_repo, "acme/demo", None, 2000, ["feat/login"], people)
     lanes = {lane.name: lane for lane in graph.lanes}
     assert lanes["feat/login"].finished is False
+
+
+def test_merged_back_branches_move_away_from_their_parent() -> None:
+    """Of two siblings, the merged one sits further out even if it was active more recently."""
+    from app.gitlog import RawCommit
+    from app.lanes import assign_lanes, display_order, lane_bases
+
+    def commit(sha: str, *parents: str) -> RawCommit:
+        return RawCommit(sha, parents, "A", "a@x.com", "", "", sha)
+
+    commits = [  # newest first
+        commit("m2", "m1", "d1"),  # merges the "done" branch
+        commit("d1", "m0"),  # done: branched off, then merged back
+        commit("m1", "m0"),
+        commit("o1", "m0"),  # open: still in progress, older activity
+        commit("m0"),
+    ]
+    tips = {"main": "m2", "done": "d1", "open": "o1"}
+    lanes, lane_of = assign_lanes(commits, tips, "main", [])
+    x_of = {c.sha: len(commits) - 1 - rank for rank, c in enumerate(commits)}
+    base, branched_at = lane_bases(lanes, x_of, lane_of, {c.sha: c for c in commits})
+    names = [lane.name for lane in lanes]
+    done = names.index("done")
+
+    by_recency, _ = display_order(lanes, x_of, [], base, branched_at, settled=set())
+    assert [names[i] for i in by_recency] == ["main", "done", "open"]
+    by_activity, _ = display_order(lanes, x_of, [], base, branched_at, settled={done})
+    assert [names[i] for i in by_activity] == ["main", "open", "done"]

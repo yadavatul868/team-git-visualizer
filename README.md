@@ -60,8 +60,11 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 
 ## How branches are ordered
 
-The branch column is arranged like a family tree. Each branch sits directly below the branch it
-was branched off from, with the most recently created one closest. Branches of branches nest under
+The branch column is arranged like a family tree. Each branch sits next to the branch it was
+branched off from. **The most active branches sit closest:** work still in progress comes first,
+and branches already merged back move further away, each group ordered by most recent activity.
+Integration branches such as `dev` count as active. In the centered layout, the busiest branches
+therefore surround the default branch. Branches of branches nest under
 their own parent. Under each branch name, a second line says where it came from, e.g.
 "↓ from main": the arrow points to that branch's row (hidden when zoomed far out; in the Top-down
 layout names are also indented by level). The branch priority list and then the default branch come
