@@ -47,10 +47,11 @@ def test_graph(client: TestClient) -> None:
 def test_graph_priority_param(client: TestClient) -> None:
     params = {"repo": "acme/demo", "days": 30, "priority": " dev , main "}
     lanes = client.get("/api/graph", params=params).json()["lanes"]
-    # Priority branches lead, each followed by the branches made from it. With dev first, dev
-    # also owns the initial commit, so stage (branched from it) is part of dev's family.
+    # Priority branches lead, each followed by the branches made from it: open work first
+    # (feat/search), then merged-back branches, most recently active first. With dev first,
+    # dev also owns the initial commit, so stage (branched from it) is part of dev's family.
     assert [lane["name"] for lane in lanes] == [
-        "dev", "feat-old", "feat/search", "feat/login", "stage", "main"
+        "dev", "feat/search", "stage", "feat-old", "feat/login", "main"
     ]  # fmt: skip
 
 
