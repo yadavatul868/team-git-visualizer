@@ -35,7 +35,7 @@ from app.sync import (
 
 app = FastAPI(title="Team Git Visualizer API", version="0.1.0")
 SettingsDep = Annotated[Settings, Depends(get_settings)]
-MAX_WINDOW_DAYS = 30  # the graph only ever shows recent work
+MAX_WINDOW_DAYS = 30  # windows are 1-30 days, or 0 for all history (newest max_commits)
 
 
 class UnknownPersonError(LookupError):
@@ -98,13 +98,15 @@ def graph(
     repo: str,
     settings: SettingsDep,
     store: StoreDep,
-    days: Annotated[int, Query(ge=1, le=MAX_WINDOW_DAYS, description="Look-back window")] = 30,
+    days: Annotated[
+        int, Query(ge=0, le=MAX_WINDOW_DAYS, description="Look-back window; 0 = all history")
+    ] = 30,
     priority: Annotated[str, Query(description="Comma-separated branch names")] = "",
 ) -> Graph:
     ref, path = open_cached_repo(repo, settings.cache_dir)
     branch_priority = [name.strip() for name in priority.split(",") if name.strip()]
     return build_graph(
-        path, ref.key, days, settings.max_commits, branch_priority, people_for(path, store)
+        path, ref.key, days or None, settings.max_commits, branch_priority, people_for(path, store)
     )
 
 

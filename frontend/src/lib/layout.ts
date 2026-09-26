@@ -3,6 +3,7 @@ import type { Edge, Node } from '@xyflow/react'
 import type { EdgeKind, Graph, GraphNode, Selection } from '../types'
 import { authorColor, type AuthorSlots } from './colors'
 import { initials } from './format'
+import type { Blob, Compaction } from './compact'
 import type { Arrangement } from './rows'
 
 /** Horizontal distance between consecutive commits. */
@@ -11,6 +12,9 @@ export const COLUMN_WIDTH = 120
 export const LANE_HEIGHT = 96
 /** Diameter of a commit dot. */
 export const NODE_SIZE = 30
+/** Size of a blob (a collapsed run of commits). */
+export const BLOB_WIDTH = 50
+export const BLOB_HEIGHT = 30
 /** Graph x of the first commit, leaving room for the sticky lane labels at zoom 1. */
 export const ORIGIN_X = 210
 
@@ -26,35 +30,78 @@ export interface CommitNodeData extends Record<string, unknown> {
 
 export interface GitEdgeData extends Record<string, unknown> {
   kind: EdgeKind
+  sourceSha: string
+  targetSha: string
+}
+
+export interface BlobNodeData extends Record<string, unknown> {
+  blob: Blob
+  color: string
+  initials: string
+  selected: boolean
+  dimmed: boolean
+  folded: boolean
 }
 
 export type CommitFlowNode = Node<CommitNodeData, 'commit'>
+export type BlobFlowNode = Node<BlobNodeData, 'blob'>
+export type GraphFlowNode = CommitFlowNode | BlobFlowNode
 export type GitFlowEdge = Edge<GitEdgeData, 'git'>
 
-/** Centre of a commit in graph coordinates. */
+/** Graph x of a column. */
+export const columnX = (column: number): number => ORIGIN_X + column * COLUMN_WIDTH
+
+/** Centre of a commit (or of the blob it's collapsed into) in graph coordinates. */
 export function commitCenter(
-  commit: Pick<GraphNode, 'x' | 'lane'>,
+  commit: Pick<GraphNode, 'sha' | 'lane'>,
   rowOf: Arrangement['rowOf'],
+  compaction: Compaction,
 ): { x: number; y: number } {
-  return { x: ORIGIN_X + commit.x * COLUMN_WIDTH, y: (rowOf.get(commit.lane) ?? 0) * LANE_HEIGHT }
+  return {
+    x: columnX(compaction.columnOf.get(commit.sha) ?? 0),
+    y: (rowOf.get(commit.lane) ?? 0) * LANE_HEIGHT,
+  }
 }
 
 export function toFlowNodes(
-  graph: Graph,
   arrangement: Arrangement,
+  compaction: Compaction,
   slots: AuthorSlots,
   selection: Selection | null,
   highlightedAuthor: string | null,
-): CommitFlowNode[] {
+): GraphFlowNode[] {
   const folded = new Set(
     arrangement.rows.flatMap((row) => (row.kind === 'finished' ? row.lanes.map((l) => l.id) : [])),
   )
-  return graph.nodes.map((commit) => {
-    const center = commitCenter(commit, arrangement.rowOf)
+  const y = (lane: number) => (arrangement.rowOf.get(lane) ?? 0) * LANE_HEIGHT
+  return compaction.units.map((unit, column): GraphFlowNode => {
+    if (unit.kind === 'blob') {
+      const { blob } = unit
+      const author = blob.commits[0].author
+      return {
+        id: blob.id,
+        type: 'blob',
+        position: { x: columnX(column) - BLOB_WIDTH / 2, y: y(blob.lane) - BLOB_HEIGHT / 2 },
+        width: BLOB_WIDTH,
+        height: BLOB_HEIGHT,
+        draggable: false,
+        connectable: false,
+        className: `author-node-${slots[author.key] ?? 'other'}`,
+        data: {
+          blob,
+          color: authorColor(slots, author.key),
+          initials: initials(author.name),
+          selected: selection?.type === 'blob' && selection.id === blob.id,
+          dimmed: highlightedAuthor !== null && author.key !== highlightedAuthor,
+          folded: folded.has(blob.lane),
+        },
+      }
+    }
+    const { commit } = unit
     return {
       id: commit.sha,
       type: 'commit',
-      position: { x: center.x - NODE_SIZE / 2, y: center.y - NODE_SIZE / 2 },
+      position: { x: columnX(column) - NODE_SIZE / 2, y: y(commit.lane) - NODE_SIZE / 2 },
       width: NODE_SIZE,
       height: NODE_SIZE,
       draggable: false,
@@ -72,19 +119,29 @@ export function toFlowNodes(
   })
 }
 
-export function toFlowEdges(graph: Graph, selection: Selection | null): GitFlowEdge[] {
-  return graph.edges.map((edge) => {
+export function toFlowEdges(
+  graph: Graph,
+  compaction: Compaction,
+  selection: Selection | null,
+): GitFlowEdge[] {
+  const edges: GitFlowEdge[] = []
+  for (const edge of graph.edges) {
+    const source = compaction.unitIdOf.get(edge.source) ?? edge.source
+    const target = compaction.unitIdOf.get(edge.target) ?? edge.target
+    if (source === target) continue // inside a blob
     const selected = selection?.type === 'edge' && selection.id === edge.id
-    return {
+    edges.push({
       id: edge.id,
       type: 'git',
-      source: edge.source,
-      target: edge.target,
+      source,
+      target,
       className: `edge-${edge.kind}${selected ? ' is-selected' : ''}`,
       zIndex: selected ? 1 : 0,
-      data: { kind: edge.kind },
-    }
-  })
+      // The real commits at each end, for the details panel (the flow ends may be blobs).
+      data: { kind: edge.kind, sourceSha: edge.source, targetSha: edge.target },
+    })
+  }
+  return edges
 }
 
 /** SVG path for an edge, drawn like a git graph rather than a generic curve:
@@ -129,9 +186,10 @@ export interface FitOptions {
 export function fitViewport(
   graph: Graph,
   arrangement: Arrangement,
+  compaction: Compaction,
   { width, height, top, left, right }: FitOptions,
 ): { x: number; y: number; zoom: number } {
-  const span = Math.max(1, graph.nodes.length - 1) * COLUMN_WIDTH
+  const span = Math.max(1, compaction.units.length - 1) * COLUMN_WIDTH
   const usableHeight = Math.max(1, height - top - LANE_HEIGHT * 0.25)
   const fitWidth = (width - left - right) / span
   const fitHeight = usableHeight / (Math.max(1, arrangement.rows.length) * LANE_HEIGHT)
@@ -159,13 +217,14 @@ export function fitViewport(
 export function laneViewport(
   graph: Graph,
   arrangement: Arrangement,
+  compaction: Compaction,
   laneId: number,
   { width, height, top }: Pick<FitOptions, 'width' | 'height' | 'top'>,
   zoom: number,
   placement: 'top' | 'middle',
 ): { x: number; y: number; zoom: number } {
   const newest = graph.nodes.filter((node) => node.lane === laneId).at(-1) // nodes are oldest → newest
-  const centerX = newest ? commitCenter(newest, arrangement.rowOf).x : ORIGIN_X
+  const centerX = newest ? commitCenter(newest, arrangement.rowOf, compaction).x : ORIGIN_X
   const row = arrangement.rowOf.get(laneId) ?? 0
   const screenY = placement === 'middle' ? top + (height - top) / 2 : top + 0.6 * LANE_HEIGHT * zoom
   return {

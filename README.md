@@ -49,7 +49,7 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 |---|---|
 | Search box | Type part of a repo's name or URL to pick one from `repos.json` (↑/↓, Enter), or paste any GitHub URL |
 | **Load** / **Refresh** | Fetch the latest branches and commits from GitHub |
-| **Window** | Last 7, 14 or 30 days (30 is the default and the maximum; capped at the newest 2,000 commits) |
+| **Window** | Last 7, 14 or 30 days (default 30), or **All history**. Capped at the newest 2,000 commits. |
 | **Layout** / **Show merged** | Centered on default (default) or Top-down; show or fold merged branches. Both are remembered in the browser. |
 | **Branch priority** | Optional, e.g. `main, stage, dev`. These branches come first (each followed by the branches made from it) and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
 | Author chips | Click to highlight one person's commits |
@@ -83,6 +83,30 @@ with its branch families alternating above and below it (newest nearest). The fi
 view keep `main` mid-screen. **Top-down** (default branch first, families stacked below) is available
 in the Layout selector.
 
+## Zooming the time axis
+
+When you zoom out, **straight stretches of commits collapse into blobs** (e.g. "● 12") and the time
+axis shrinks with them. Zoom back in and they expand into individual commits again. It happens
+gradually:
+
+| Zoom | What collapses |
+|---|---|
+| Close | Nothing, every commit is shown |
+| A bit out | Stretches of 8+ commits |
+| Further out | Stretches of 4+ |
+| Far out | Stretches of 2+ |
+
+Only commits that don't affect the graph's shape collapse. These always stay visible:
+- where a branch starts or ends
+- any branch-off or merge
+- branch tips
+- commits whose parent is outside the window
+- the selected commit
+
+A blob holds only one person's consecutive commits on one branch, so colours still show who did
+what. The same commit stays under the centre of the screen as blobs open and close. **Click a blob**
+to zoom in just far enough to open it; the details panel lists its commits.
+
 ## One name per person
 
 People often commit under several identities without meaning to. Examples: a work email, a
@@ -113,8 +137,10 @@ is:
 
 ```bash
 cd backend && uv run pytest && uv run ruff check .    # backend tests + lint
-cd frontend && npm run build && npm run lint          # type-check, build, lint
+cd frontend && npm test && npm run build && npm run lint   # unit tests, type-check, build, lint
 ```
 
-- `backend/` is a FastAPI app. It keeps bare clones in `.cache/repos/` (git-ignored).
+- `backend/` is a FastAPI app. It keeps bare repo clones and GitHub identity lookups in
+  `~/.cache/team-git-visualizer/`, outside the project, so cloud-synced folders like OneDrive don't
+  upload them. Override with `CACHE_DIR` / `IDENTITY_DIR`.
 - `frontend/` is React + Vite + React Flow. Vite proxies `/api` to the backend on :8000.

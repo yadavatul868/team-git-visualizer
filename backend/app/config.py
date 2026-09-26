@@ -7,14 +7,18 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Repo clones and identity lookups live outside the project folder, so a cloud-synced folder
+# (OneDrive, iCloud, Dropbox) doesn't upload hundreds of MB of git objects. Override with the
+# CACHE_DIR / IDENTITY_DIR environment variables.
+CACHE_ROOT = Path.home() / ".cache" / "team-git-visualizer"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", extra="ignore")
 
     github_pat: SecretStr = SecretStr("")
-    cache_dir: Path = REPO_ROOT / ".cache" / "repos"
-    identity_dir: Path = REPO_ROOT / ".cache" / "identities"
+    cache_dir: Path = CACHE_ROOT / "repos"
+    identity_dir: Path = CACHE_ROOT / "identities"
     max_commits: int = 2000
     repos_file: Path = REPO_ROOT / "repos.json"
 
