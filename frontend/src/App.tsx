@@ -9,10 +9,14 @@ import { TopBar } from './components/TopBar'
 import { assignAuthorSlots } from './lib/colors'
 import {
   arrangeRows,
+  isDeletedLane,
   savedLayout,
+  savedShowDeleted,
   savedShowFinished,
   saveLayout,
+  saveShowDeleted,
   saveShowFinished,
+  withoutDeleted,
   type LaneLayout,
 } from './lib/rows'
 import { load, save } from './lib/storage'
@@ -55,6 +59,7 @@ export default function App() {
   const [suggestions, setSuggestions] = useState<RepoSuggestion[]>([])
   const [layout, setLayout] = useState<LaneLayout>(savedLayout)
   const [showFinished, setShowFinished] = useState(savedShowFinished)
+  const [showDeleted, setShowDeleted] = useState(savedShowDeleted)
   const changeShowFinished = (show: boolean) => {
     setShowFinished(show)
     saveShowFinished(show)
@@ -124,11 +129,19 @@ export default function App() {
     [graph],
   )
 
-  const arrangement = useMemo(
-    () => (graph ? arrangeRows(graph, layout, showFinished) : null),
-    [graph, layout, showFinished],
+  // What the graph panel draws: without deleted (merged-then-deleted) branches unless asked for.
+  const displayGraph = useMemo(
+    () => (graph && !showDeleted ? withoutDeleted(graph) : graph),
+    [graph, showDeleted],
   )
-  const finishedCount = graph ? graph.lanes.filter((lane) => lane.finished).length : 0
+  const arrangement = useMemo(
+    () => (displayGraph ? arrangeRows(displayGraph, layout, showFinished, showDeleted) : null),
+    [displayGraph, layout, showFinished, showDeleted],
+  )
+  const deletedCount = graph ? graph.lanes.filter(isDeletedLane).length : 0
+  const finishedCount = graph
+    ? graph.lanes.filter((lane) => lane.finished && (showDeleted || !isDeletedLane(lane))).length
+    : 0
 
   const selectCommit = useCallback((sha: string) => {
     setSelection({ type: 'node', sha })
@@ -165,6 +178,12 @@ export default function App() {
           saveLayout(value)
         }}
         finishedCount={finishedCount}
+        deletedCount={deletedCount}
+        showDeleted={showDeleted}
+        onShowDeletedChange={(show) => {
+          setShowDeleted(show)
+          saveShowDeleted(show)
+        }}
         showFinished={showFinished}
         onShowFinishedChange={changeShowFinished}
         theme={theme}
@@ -210,10 +229,10 @@ export default function App() {
       )}
 
       <main className={`workspace${loadingGraph ? ' is-loading' : ''}`}>
-        {graph && arrangement && graph.nodes.length > 0 ? (
+        {graph && displayGraph && arrangement && graph.nodes.length > 0 ? (
           <>
             <GraphPanel
-              graph={graph}
+              graph={displayGraph}
               slots={slots}
               selection={selection}
               highlightedAuthor={highlightedAuthor}

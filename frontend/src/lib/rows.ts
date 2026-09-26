@@ -16,9 +16,34 @@ export interface Arrangement {
   rowOf: Map<number, number>
 }
 
-export function arrangeRows(graph: Graph, layout: LaneLayout, showFinished: boolean): Arrangement {
-  const hidden = showFinished ? [] : graph.lanes.filter((lane) => lane.finished)
-  const visible = graph.lanes.filter((lane) => showFinished || !lane.finished)
+/**
+ * A lane for a branch that no longer exists. In the graph these are always merged-then-deleted:
+ * a branch deleted without being merged has no reachable commits, so it's never fetched at all.
+ * Hiding them therefore loses no work; the merge commit on the receiving branch stays.
+ */
+export const isDeletedLane = (lane: Lane): boolean =>
+  lane.kind === 'deleted' || lane.kind === 'unlabelled'
+
+/** The graph without deleted branches' commits and lines. Lanes keep their ids (and stay in the
+ *  list so lookups by id still work); arrangeRows leaves them out. */
+export function withoutDeleted(graph: Graph): Graph {
+  const deleted = new Set(graph.lanes.filter(isDeletedLane).map((lane) => lane.id))
+  if (deleted.size === 0) return graph
+  const nodes = graph.nodes.filter((node) => !deleted.has(node.lane))
+  const kept = new Set(nodes.map((node) => node.sha))
+  const edges = graph.edges.filter((edge) => kept.has(edge.source) && kept.has(edge.target))
+  return { ...graph, nodes, edges }
+}
+
+export function arrangeRows(
+  graph: Graph,
+  layout: LaneLayout,
+  showFinished: boolean,
+  showDeleted: boolean,
+): Arrangement {
+  const lanes = graph.lanes.filter((lane) => showDeleted || !isDeletedLane(lane))
+  const hidden = showFinished ? [] : lanes.filter((lane) => lane.finished)
+  const visible = lanes.filter((lane) => showFinished || !lane.finished)
   const ordered = layout === 'centered' ? centered(visible) : visible
 
   const rows: Row[] = ordered.map((lane) => ({ kind: 'lane', lane }))
@@ -74,3 +99,5 @@ export const savedLayout = (): LaneLayout =>
 export const saveLayout = (layout: LaneLayout) => save('tgv:layout', layout)
 export const savedShowFinished = (): boolean => load<boolean>('tgv:show-finished', false) === true
 export const saveShowFinished = (show: boolean) => save('tgv:show-finished', show)
+export const savedShowDeleted = (): boolean => load<boolean>('tgv:show-deleted', false) === true
+export const saveShowDeleted = (show: boolean) => save('tgv:show-deleted', show)
