@@ -59,9 +59,15 @@ export function arrangeRows(
 }
 
 /**
- * The default branch in the middle, its branch families alternating above and below it (most
- * recent nearest). Families above are mirrored, so each branch stays next to the
- * branch it came from and sub-branches sit further out.
+ * Centered on the default branch.
+ *
+ * With several long-lived branches (a spine such as main, stage, dev) they stay together as one
+ * block, in promotion order, with the default branch's own families above it and the other
+ * spine branches' families below (the last spine branch's nearest). With only the default branch
+ * long-lived, its families alternate above and below it instead.
+ *
+ * Either way the most active family sits nearest, and families above are mirrored so each branch
+ * stays next to the branch it came from, with sub-branches further out.
  */
 function centered(lanes: Lane[]): Lane[] {
   const visibleIds = new Set(lanes.map((lane) => lane.id))
@@ -79,6 +85,19 @@ function centered(lanes: Lane[]): Lane[] {
     ...(children.get(lane.id) ?? []).flatMap((child) => family(child)),
   ]
 
+  const mirrored = (blocks: Lane[][]) => [...blocks].reverse().flatMap((block) => [...block].reverse())
+
+  const spine = lanes.filter((lane) => lane.long_lived)
+  if (spine.length >= 2) {
+    const inSpine = new Set(spine.map((lane) => lane.id))
+    const familiesOf = (lane: Lane) =>
+      (children.get(lane.id) ?? []).filter((child) => !inSpine.has(child.id)).map(family)
+    const [head, ...rest] = spine
+    const below = [...rest].reverse().flatMap(familiesOf)
+    const loose = roots.filter((root) => !inSpine.has(root.id)).map(family)
+    return [...mirrored(familiesOf(head)), ...spine, ...below.flat(), ...loose.flat()]
+  }
+
   const center = lanes.find((lane) => lane.kind === 'default') ?? roots[0]
   if (!center) return lanes
   const blocks = [
@@ -90,8 +109,7 @@ function centered(lanes: Lane[]): Lane[] {
   const below: Lane[][] = []
   blocks.forEach((block, index) => (index % 2 === 0 ? above : below).push(block))
   // Nearest-to-centre block first in `above`, so reverse the stacking and mirror each block.
-  const top = [...above].reverse().flatMap((block) => [...block].reverse())
-  return [...top, center, ...below.flat()]
+  return [...mirrored(above), center, ...below.flat()]
 }
 
 export const savedLayout = (): LaneLayout =>
