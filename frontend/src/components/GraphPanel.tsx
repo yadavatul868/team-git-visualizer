@@ -5,34 +5,38 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
   useViewport,
   type EdgeMouseHandler,
   type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import type { AuthorSlots } from '../lib/colors'
+import { LEVELS, compact, levelForZoom, zoomToExpand, type Compaction } from '../lib/compact'
 import { dayKey, formatDay } from '../lib/format'
 import {
   COLUMN_WIDTH,
   LANE_HEIGHT,
   ORIGIN_X,
+  columnX,
   commitCenter,
   fitViewport,
   laneViewport,
   toFlowEdges,
   toFlowNodes,
-  type CommitFlowNode,
   type GitFlowEdge,
+  type GraphFlowNode,
 } from '../lib/layout'
 import type { Arrangement, LaneLayout } from '../lib/rows'
 import type { Theme } from '../lib/theme'
 import type { Graph, Selection } from '../types'
+import { BlobNode } from './BlobNode'
 import { CommitNode } from './CommitNode'
 import { GitEdge } from './GitEdge'
 
-const nodeTypes = { commit: CommitNode }
+const nodeTypes = { commit: CommitNode, blob: BlobNode }
 const edgeTypes = { git: GitEdge }
 const RULER_HEIGHT = 34
 /** Screen x (inside the graph area) of the oldest commit when the whole graph fits. */
@@ -69,6 +73,18 @@ export function GraphPanel(props: GraphPanelProps) {
   )
 }
 
+/** Commits that must stay visible (never collapse into a blob): the selection and its ends. */
+function keptCommits(selection: Selection | null, focusSha: string | null): Set<string> {
+  const keep = new Set<string>()
+  if (focusSha) keep.add(focusSha)
+  if (selection?.type === 'node') keep.add(selection.sha)
+  if (selection?.type === 'edge') {
+    keep.add(selection.source)
+    keep.add(selection.target)
+  }
+  return keep
+}
+
 function GraphCanvas({
   graph,
   slots,
@@ -84,23 +100,45 @@ function GraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null)
   const { setViewport, setCenter, getZoom, getViewport } = useReactFlow()
   const columnRef = useRef<HTMLElement>(null)
-  const nodes = useMemo(
-    () => toFlowNodes(graph, arrangement, slots, selection, highlightedAuthor),
-    [graph, arrangement, slots, selection, highlightedAuthor],
+
+  // Zoom level → how much of the time axis is compacted (see lib/compact.ts).
+  const zoom = useStore((state) => state.transform[2])
+  const [level, setLevel] = useState(0)
+  const zoomLevel = levelForZoom(zoom, level)
+  if (zoomLevel !== level) setLevel(zoomLevel) // derived from zoom, with hysteresis
+
+  const keep = useMemo(() => keptCommits(selection, focusSha), [selection, focusSha])
+  const compaction = useMemo(
+    () => compact(graph, LEVELS[level].minRun, keep),
+    [graph, level, keep],
   )
-  const edges = useMemo(() => toFlowEdges(graph, selection), [graph, selection])
+  const nodes = useMemo(
+    () => toFlowNodes(arrangement, compaction, slots, selection, highlightedAuthor),
+    [arrangement, compaction, slots, selection, highlightedAuthor],
+  )
+  const edges = useMemo(
+    () => toFlowEdges(graph, compaction, selection),
+    [graph, compaction, selection],
+  )
+
+  const canvasSize = () => ({
+    width: containerRef.current?.clientWidth ?? 1000,
+    height: containerRef.current?.clientHeight ?? 600,
+  })
 
   const fit = useCallback(
     (duration = 0) => {
-      const canvas = containerRef.current
-      const viewport = fitViewport(graph, arrangement, {
-        width: canvas?.clientWidth ?? 1000,
-        height: canvas?.clientHeight ?? 600,
-        top: RULER_HEIGHT,
-        left: FIRST_COMMIT_LEFT,
-        right: RIGHT_PADDING,
-      })
-      void setViewport(viewport, { duration })
+      const options = { ...canvasSize(), top: RULER_HEIGHT, left: FIRST_COMMIT_LEFT, right: RIGHT_PADDING }
+      // Pick the most detailed level whose own fit zoom lands in that level.
+      let chosen = { viewport: { x: 0, y: 0, zoom: 1 } }
+      for (let index = 0; index < LEVELS.length; index++) {
+        const candidate = compact(graph, LEVELS[index].minRun, new Set())
+        const viewport = fitViewport(graph, arrangement, candidate, options)
+        chosen = { viewport }
+        if (levelForZoom(viewport.zoom) === index) break
+      }
+      // The zoom level (and so the compaction) follows from the zoom this viewport sets.
+      void setViewport(chosen.viewport, { duration })
     },
     [graph, arrangement, setViewport],
   )
@@ -120,22 +158,62 @@ function GraphCanvas({
     return () => observer.disconnect()
   }, [fit])
 
-  // Centre on a commit when asked (e.g. a parent clicked in the details panel).
+  // When the zoom level changes the columns shift; keep the commit at the centre of the screen
+  // where it was, so blobs open and close in place. A blob click instead centres on that blob.
+  const previous = useRef<Compaction | null>(null)
+  const pendingFocus = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const before = previous.current
+    previous.current = compaction
+    const { x, y, zoom: currentZoom } = getViewport()
+    if (pendingFocus.current) {
+      const commit = graph.nodes.find((node) => node.sha === pendingFocus.current)
+      pendingFocus.current = null
+      if (commit) {
+        const center = commitCenter(commit, arrangement.rowOf, compaction)
+        void setCenter(center.x, center.y, { zoom: currentZoom, duration: 300 })
+      }
+      return
+    }
+    if (!before || before === compaction || before.minRun === compaction.minRun) return
+    const { width } = canvasSize()
+    const centerX = (width / 2 - x) / currentZoom
+    const column = Math.min(
+      before.units.length - 1,
+      Math.max(0, Math.round((centerX - ORIGIN_X) / COLUMN_WIDTH)),
+    )
+    const unit = before.units[column]
+    if (!unit) return
+    const sha = unit.kind === 'blob' ? unit.blob.commits[0].sha : unit.commit.sha
+    const shift = columnX(compaction.columnOf.get(sha) ?? column) - columnX(column)
+    void setViewport({ x: x - shift * currentZoom, y, zoom: currentZoom })
+  }, [compaction, graph, arrangement, getViewport, setViewport, setCenter])
+
+  // Centre on a commit when asked (e.g. a parent clicked in the details panel), once per request.
+  const focused = useRef<string | null>(null)
   useEffect(() => {
-    const commit = focusSha ? graph.nodes.find((node) => node.sha === focusSha) : undefined
+    if (!focusSha || focused.current === focusSha) return
+    const commit = graph.nodes.find((node) => node.sha === focusSha)
     if (!commit) return
-    const center = commitCenter(commit, arrangement.rowOf)
-    setCenter(center.x, center.y, { zoom: Math.max(getZoom(), 0.8), duration: 400 })
-  }, [focusSha, graph, arrangement, setCenter, getZoom])
+    focused.current = focusSha
+    const center = commitCenter(commit, arrangement.rowOf, compaction)
+    void setCenter(center.x, center.y, { zoom: Math.max(getZoom(), 0.8), duration: 400 })
+  }, [focusSha, graph, arrangement, compaction, setCenter, getZoom])
 
   /** Jump to a branch: its lane becomes the top row, its newest commit centred. */
   const goToLane = (laneId: number) => {
     userMoved.current = true
-    const zoom = Math.max(getZoom(), MIN_JUMP_ZOOM)
-    const canvas = containerRef.current
-    const size = { width: canvas?.clientWidth ?? 1000, height: canvas?.clientHeight ?? 600 }
+    const jumpZoom = Math.max(getZoom(), MIN_JUMP_ZOOM)
     const placement = layout === 'centered' ? 'middle' : 'top'
-    const viewport = laneViewport(graph, arrangement, laneId, { ...size, top: RULER_HEIGHT }, zoom, placement)
+    const viewport = laneViewport(
+      graph,
+      arrangement,
+      compaction,
+      laneId,
+      { ...canvasSize(), top: RULER_HEIGHT },
+      jumpZoom,
+      placement,
+    )
     void setViewport(viewport, { duration: 350 })
   }
   const defaultLane = graph.lanes.find((lane) => lane.kind === 'default')
@@ -147,17 +225,35 @@ function GraphCanvas({
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
       userMoved.current = true
-      const { x, y, zoom } = getViewport()
-      void setViewport({ x, y: y - event.deltaY, zoom })
+      const { x, y, zoom: currentZoom } = getViewport()
+      void setViewport({ x, y: y - event.deltaY, zoom: currentZoom })
     }
     column.addEventListener('wheel', onWheel, { passive: false })
     return () => column.removeEventListener('wheel', onWheel)
   }, [getViewport, setViewport])
 
-  const onNodeClick: NodeMouseHandler<CommitFlowNode> = (_, node) =>
-    onSelect({ type: 'node', sha: node.id })
+  const onNodeClick: NodeMouseHandler<GraphFlowNode> = (_, node) => {
+    if (node.type !== 'blob') {
+      onSelect({ type: 'node', sha: node.id })
+      return
+    }
+    // Clicking a blob opens it: zoom in just enough for its commits to show, centred on it.
+    const { commits } = node.data.blob
+    onSelect({ type: 'blob', id: node.id, shas: commits.map((commit) => commit.sha) })
+    userMoved.current = true
+    const targetZoom = Math.max(getZoom(), zoomToExpand(commits.length))
+    setLevel(levelForZoom(targetZoom))
+    pendingFocus.current = commits[Math.floor(commits.length / 2)].sha
+    const { x, y } = getViewport()
+    void setViewport({ x, y, zoom: targetZoom })
+  }
   const onEdgeClick: EdgeMouseHandler<GitFlowEdge> = (_, edge) =>
-    onSelect({ type: 'edge', id: edge.id, source: edge.source, target: edge.target })
+    onSelect({
+      type: 'edge',
+      id: edge.id,
+      source: edge.data?.sourceSha ?? edge.source,
+      target: edge.data?.targetSha ?? edge.target,
+    })
 
   return (
     <div className="graph-panel">
@@ -184,65 +280,71 @@ function GraphCanvas({
         </div>
       </aside>
       <div className="graph-canvas" ref={containerRef}>
-        <LaneBands graph={graph} arrangement={arrangement} />
+        <LaneBands compaction={compaction} arrangement={arrangement} />
         <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodeClick={onNodeClick}
-        onEdgeClick={onEdgeClick}
-        onPaneClick={() => onSelect(null)}
-        panOnScroll
-        panOnScrollSpeed={1}
-        zoomOnScroll={false}
-        onMoveStart={(event) => {
-          if (event) userMoved.current = true // null for programmatic moves
-        }}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        minZoom={0.1}
-        maxZoom={2.5}
-        colorMode={theme}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Controls showInteractive={false} showFitView={false} position="bottom-left">
-          <ControlButton
-            onClick={() => {
-              userMoved.current = false
-              fit(300)
-            }}
-            title="Fit view"
-            aria-label="Fit view"
-          >
-            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
-              <path
-                d="M1 5V1h4M11 1h4v4M15 11v4h-4M5 15H1v-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-              />
-            </svg>
-          </ControlButton>
-        </Controls>
-        <MiniMap
-          pannable
-          zoomable
-          position="bottom-right"
-          nodeClassName={(node) => (node.className ?? '') + ' minimap-node'}
-          nodeBorderRadius={20}
-          maskColor="var(--minimap-mask)"
-        />
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodeClick={onNodeClick}
+          onEdgeClick={onEdgeClick}
+          onPaneClick={() => onSelect(null)}
+          panOnScroll
+          panOnScrollSpeed={1}
+          zoomOnScroll={false}
+          onMoveStart={(event) => {
+            if (event) userMoved.current = true // null for programmatic moves
+          }}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          minZoom={0.1}
+          maxZoom={2.5}
+          colorMode={theme}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Controls showInteractive={false} showFitView={false} position="bottom-left">
+            <ControlButton
+              onClick={() => {
+                userMoved.current = false
+                fit(300)
+              }}
+              title="Fit view"
+              aria-label="Fit view"
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
+                <path
+                  d="M1 5V1h4M11 1h4v4M15 11v4h-4M5 15H1v-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                />
+              </svg>
+            </ControlButton>
+          </Controls>
+          <MiniMap
+            pannable
+            zoomable
+            position="bottom-right"
+            nodeClassName={(node) => (node.className ?? '') + ' minimap-node'}
+            nodeBorderRadius={20}
+            maskColor="var(--minimap-mask)"
+          />
         </ReactFlow>
-        <DateRuler graph={graph} />
+        <DateRuler compaction={compaction} />
       </div>
     </div>
   )
 }
 
 /** Alternating row stripes and day separators, drawn behind the graph and kept in sync with it. */
-function LaneBands({ graph, arrangement }: { graph: Graph; arrangement: Arrangement }) {
+function LaneBands({
+  compaction,
+  arrangement,
+}: {
+  compaction: Compaction
+  arrangement: Arrangement
+}) {
   const { x, y, zoom } = useViewport()
   return (
     <div className="lane-bands" aria-hidden>
@@ -253,7 +355,7 @@ function LaneBands({ graph, arrangement }: { graph: Graph; arrangement: Arrangem
           style={{ top: y + (index - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
         />
       ))}
-      {dayBoundaries(graph).map(({ x: graphX, key }) => (
+      {dayBoundaries(compaction).map(({ x: graphX, key }) => (
         <div key={key} className="day-line" style={{ left: x + graphX * zoom }} />
       ))}
     </div>
@@ -352,9 +454,9 @@ function LaneLabels({
 }
 
 /** Day labels along the top, marking where each calendar day starts. */
-function DateRuler({ graph }: { graph: Graph }) {
+function DateRuler({ compaction }: { compaction: Compaction }) {
   const { x, zoom } = useViewport()
-  const visible = skipCrowded(dayBoundaries(graph), (day) => x + day.x * zoom, MIN_DAY_GAP)
+  const visible = skipCrowded(dayBoundaries(compaction), (day) => x + day.x * zoom, MIN_DAY_GAP)
   return (
     <div className="date-ruler" aria-hidden style={{ height: RULER_HEIGHT }}>
       {visible.map(({ item: day, position }) => (
@@ -377,16 +479,19 @@ function skipCrowded<T>(items: T[], positionOf: (item: T) => number, gap: number
   return kept
 }
 
-function dayBoundaries(graph: Graph): { x: number; key: string; label: string }[] {
+/** Where each calendar day starts along the (possibly compacted) time axis. A blob counts from
+ *  its first commit, so days entirely inside a blob get no tick. */
+function dayBoundaries(compaction: Compaction): { x: number; key: string; label: string }[] {
   const boundaries = []
   let previous = ''
-  for (const node of graph.nodes) {
-    const key = dayKey(node.committed_at)
+  for (const [column, unit] of compaction.units.entries()) {
+    const commit = unit.kind === 'blob' ? unit.blob.commits[0] : unit.commit
+    const key = dayKey(commit.committed_at)
     if (key !== previous) {
       boundaries.push({
-        x: ORIGIN_X + (node.x - 0.5) * COLUMN_WIDTH,
+        x: ORIGIN_X + (column - 0.5) * COLUMN_WIDTH,
         key,
-        label: formatDay(node.committed_at),
+        label: formatDay(commit.committed_at),
       })
       previous = key
     }
