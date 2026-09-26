@@ -175,8 +175,8 @@ def test_link_rejects_unknown_emails(client: TestClient) -> None:
     assert client.post("/api/people/link", json=link).status_code == 404
 
 
-@pytest.mark.parametrize("days", [0, 31, 90])
-def test_window_is_limited_to_30_days(client: TestClient, days: int) -> None:
+@pytest.mark.parametrize("days", [-1, 31, 90])
+def test_window_is_30_days_at_most(client: TestClient, days: int) -> None:
     response = client.get("/api/graph", params={"repo": "acme/demo", "days": days})
     assert response.status_code == 422
 
@@ -184,3 +184,9 @@ def test_window_is_limited_to_30_days(client: TestClient, days: int) -> None:
 def test_short_window_excludes_older_commits(client: TestClient) -> None:
     body = client.get("/api/graph", params={"repo": "acme/demo", "days": 7}).json()
     assert body["summary"]["commit_count"] == 0  # the fixture's commits are ~10 days old
+
+
+def test_zero_days_means_all_history(client: TestClient) -> None:
+    body = client.get("/api/graph", params={"repo": "acme/demo", "days": 0}).json()
+    assert body["days"] is None
+    assert body["summary"]["commit_count"] == 16

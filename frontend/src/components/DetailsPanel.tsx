@@ -3,7 +3,16 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { api } from '../api'
 import { authorColor, type AuthorSlots } from '../lib/colors'
 import { formatDuration, formatFull, initials, relativeTime } from '../lib/format'
-import type { CommitDetails, CommitRef, EdgeDetails, EdgeKind, Graph, PersonRef, Selection } from '../types'
+import type {
+  CommitDetails,
+  CommitRef,
+  EdgeDetails,
+  EdgeKind,
+  Graph,
+  GraphNode,
+  PersonRef,
+  Selection,
+} from '../types'
 import { FileList } from './FileList'
 
 interface DetailsPanelProps {
@@ -26,7 +35,7 @@ export function DetailsPanel({ repo, graph, slots, selection, onSelectCommit }: 
   const [error, setError] = useState<{ key: string; message: string } | null>(null)
 
   useEffect(() => {
-    if (!selection) return
+    if (!selection || selection.type === 'blob') return // blobs are described from graph data
     const controller = new AbortController()
     const key = selectionKey(selection)
     const request =
@@ -52,6 +61,15 @@ export function DetailsPanel({ repo, graph, slots, selection, onSelectCommit }: 
           Scroll to move · pinch or ⌘ + scroll to zoom · click a branch name to jump to it
         </p>
       </div>
+    )
+  } else if (selection.type === 'blob') {
+    body = (
+      <BlobView
+        commits={graph.nodes.filter((node) => selection.shas.includes(node.sha))}
+        branch={graph.lanes[graph.nodes.find((n) => n.sha === selection.shas[0])?.lane ?? -1]?.name}
+        slots={slots}
+        onSelectCommit={onSelectCommit}
+      />
     )
   } else if (error?.key === selectionKey(selection)) {
     body = <p className="error-text">{error.message}</p>
@@ -174,6 +192,67 @@ function CommitView({
         Files changed{details.is_merge && <span className="muted"> (vs. first parent)</span>}
       </h3>
       <FileList files={details.files} truncated={details.files_truncated} />
+    </div>
+  )
+}
+
+/** A collapsed run of commits: who, where, when, and each commit (click one to open it). */
+function BlobView({
+  commits,
+  branch,
+  slots,
+  onSelectCommit,
+}: {
+  commits: GraphNode[]
+  branch: string | undefined
+  slots: AuthorSlots
+  onSelectCommit: (sha: string) => void
+}) {
+  const first = commits[0]
+  const last = commits[commits.length - 1]
+  if (!first || !last) return <p className="muted">These commits are no longer in view.</p>
+  return (
+    <div className="details">
+      <div className="details-kicker">
+        <span className="edge-kind-badge">{commits.length} commits</span>
+      </div>
+      <h2 className="details-title">
+        {commits.length} commits by {first.author.name}
+        {branch && (
+          <>
+            {' '}
+            on <span className="branch-pill">{branch}</span>
+          </>
+        )}
+      </h2>
+      <dl className="facts">
+        <dt>Author</dt>
+        <dd>
+          <span className="person">
+            <AuthorDot person={first.author} slots={slots} />
+            {first.author.name}
+          </span>
+        </dd>
+        <dt>From</dt>
+        <dd>{formatFull(first.committed_at)}</dd>
+        <dt>To</dt>
+        <dd>
+          {formatFull(last.committed_at)}{' '}
+          <span className="muted">({relativeTime(last.committed_at)})</span>
+        </dd>
+      </dl>
+      <p className="muted">
+        A straight stretch with no branch-offs or merges, shown as one block while zoomed out.
+        Zoom in, or pick a commit below.
+      </p>
+      <h3 className="section-title">Commits</h3>
+      <ul className="commit-list">
+        {commits.map((commit) => (
+          <li key={commit.sha}>
+            <CommitLink commit={commit} onSelect={onSelectCommit} />
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

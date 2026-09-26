@@ -166,3 +166,4 @@ export interface EdgeDetails {
 export type Selection =
   | { type: 'node'; sha: string }
   | { type: 'edge'; id: string; source: string; target: string }
+  | { type: 'blob'; id: string; shas: string[] }
