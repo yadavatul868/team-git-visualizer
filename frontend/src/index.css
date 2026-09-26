@@ -601,6 +601,42 @@ a.nav-title:hover {
 .lane-row.is-odd {
   background: var(--lane-band);
 }
+/* The folded "merged branches" row: hatched so it reads as a summary, not a branch */
+.lane-row.is-finished,
+.lane-band.is-finished {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 8px,
+    var(--lane-band) 8px 16px
+  );
+  border-top: 1px dashed var(--baseline);
+}
+.lane-branch-mark {
+  flex: none;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+button.lane-label.finished-label {
+  border-style: dashed;
+  color: var(--text-secondary);
+}
+.lane-label.is-finished .lane-name {
+  color: var(--text-secondary);
+}
+/* Commits on folded branches: smaller and quieter */
+.commit-node.is-folded {
+  opacity: 0.55;
+  transform: scale(0.8);
+}
+.commit-node.is-folded .commit-label,
+.commit-node.is-folded .commit-refs {
+  display: none;
+}
+.toggle-field input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--cta);
+}
 .graph-panel .react-flow {
   --xy-background-color: transparent;
   background: transparent;

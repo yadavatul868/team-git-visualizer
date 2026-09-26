@@ -64,6 +64,12 @@ export interface Lane {
   name: string
   kind: LaneKind
   commit_count: number
+  /** Lane this branch was branched off from (family tree), if shown nested. */
+  parent: number | null
+  /** Nesting level in the family tree (0 = top level). */
+  depth: number
+  /** Merged and done; can be folded into one row. */
+  finished: boolean
 }
 
 export interface GraphNode {

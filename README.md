@@ -50,6 +50,7 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 | Search box | Type part of a repo's name or URL to pick one from `repos.json` (↑/↓, Enter), or paste any GitHub URL |
 | **Load** / **Refresh** | Fetch the latest branches and commits from GitHub |
 | **Window** | Last 7, 14 or 30 days (30 is the default and the maximum; capped at the newest 2,000 commits) |
+| **Layout** / **Show merged** | Top-down (default) or Centered (experimental); show or fold merged branches. Both are remembered in the browser. |
 | **Branch priority** | Optional, e.g. `main, stage, dev`. These branches come first (each followed by the branches made from it) and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
 | Author chips | Click to highlight one person's commits |
 | ☾ Dark / ☀ Light | Theme switch, top left. The app always opens light; your choice is remembered in the browser. |
@@ -61,8 +62,20 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 
 The branch column is arranged like a family tree. Each branch sits directly below the branch it
 was branched off from, with the most recently created one closest. Branches of branches nest under
-their own parent. The branch priority list and then the default branch come first; branches whose
-starting point is older than the time window come last.
+their own parent and are indented (↳). The branch priority list and then the default branch come
+first; branches whose starting point is older than the time window come last.
+
+**Merged branches fold away.** A branch that's already merged (merged and deleted, or fully merged
+into another branch) is folded into one hatched "N merged branches" row at the bottom. Its commits
+are still shown there, smaller. Click that row or tick **Show merged** to expand them. These never
+fold:
+- the default branch and your priority branches
+- branches that receive merges from other branches (like `dev`)
+- anything not merged yet, however old: those are the branches to notice
+
+**Layout: Centered (experimental)** puts the default branch in the middle, with its branch families
+alternating above and below it (newest nearest). It's there for comparison with the default
+top-down layout.
 
 ## One name per person
 

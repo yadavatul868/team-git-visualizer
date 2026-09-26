@@ -7,6 +7,14 @@ import { PeopleDialog } from './components/PeopleDialog'
 import { SummaryStrip } from './components/SummaryStrip'
 import { TopBar } from './components/TopBar'
 import { assignAuthorSlots } from './lib/colors'
+import {
+  arrangeRows,
+  savedLayout,
+  savedShowFinished,
+  saveLayout,
+  saveShowFinished,
+  type LaneLayout,
+} from './lib/rows'
 import { load, save } from './lib/storage'
 import { applyTheme, savedTheme, type Theme } from './lib/theme'
 import { DEFAULT_WINDOW, validWindow } from './lib/window'
@@ -45,6 +53,12 @@ export default function App() {
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(savedTheme)
   const [suggestions, setSuggestions] = useState<RepoSuggestion[]>([])
+  const [layout, setLayout] = useState<LaneLayout>(savedLayout)
+  const [showFinished, setShowFinished] = useState(savedShowFinished)
+  const changeShowFinished = (show: boolean) => {
+    setShowFinished(show)
+    saveShowFinished(show)
+  }
 
   useEffect(() => {
     api
@@ -110,6 +124,12 @@ export default function App() {
     [graph],
   )
 
+  const arrangement = useMemo(
+    () => (graph ? arrangeRows(graph, layout, showFinished) : null),
+    [graph, layout, showFinished],
+  )
+  const finishedCount = graph ? graph.lanes.filter((lane) => lane.finished).length : 0
+
   const selectCommit = useCallback((sha: string) => {
     setSelection({ type: 'node', sha })
     setFocusSha(sha)
@@ -139,6 +159,14 @@ export default function App() {
         }}
         repo={graph?.repo ?? repo}
         onManagePeople={graph ? () => setPeopleOpen(true) : null}
+        layout={layout}
+        onLayoutChange={(value) => {
+          setLayout(value)
+          saveLayout(value)
+        }}
+        finishedCount={finishedCount}
+        showFinished={showFinished}
+        onShowFinishedChange={changeShowFinished}
         theme={theme}
         onToggleTheme={() => {
           const next = theme === 'light' ? 'dark' : 'light'
@@ -182,7 +210,7 @@ export default function App() {
       )}
 
       <main className={`workspace${loadingGraph ? ' is-loading' : ''}`}>
-        {graph && graph.nodes.length > 0 ? (
+        {graph && arrangement && graph.nodes.length > 0 ? (
           <>
             <GraphPanel
               graph={graph}
@@ -192,6 +220,9 @@ export default function App() {
               focusSha={focusSha}
               onSelect={setSelection}
               theme={theme}
+              arrangement={arrangement}
+              layout={layout}
+              onShowFinished={() => changeShowFinished(true)}
             />
             <DetailsPanel
               repo={graph.repo}

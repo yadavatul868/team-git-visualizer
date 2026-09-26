@@ -26,6 +26,7 @@ import {
   type CommitFlowNode,
   type GitFlowEdge,
 } from '../lib/layout'
+import type { Arrangement, LaneLayout } from '../lib/rows'
 import type { Theme } from '../lib/theme'
 import type { Graph, Selection } from '../types'
 import { CommitNode } from './CommitNode'
@@ -55,6 +56,9 @@ interface GraphPanelProps {
   focusSha: string | null
   onSelect: (selection: Selection | null) => void
   theme: Theme
+  arrangement: Arrangement
+  layout: LaneLayout
+  onShowFinished: () => void
 }
 
 export function GraphPanel(props: GraphPanelProps) {
@@ -73,20 +77,23 @@ function GraphCanvas({
   focusSha,
   onSelect,
   theme,
+  arrangement,
+  layout,
+  onShowFinished,
 }: GraphPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { setViewport, setCenter, getZoom, getViewport } = useReactFlow()
   const columnRef = useRef<HTMLElement>(null)
   const nodes = useMemo(
-    () => toFlowNodes(graph, slots, selection, highlightedAuthor),
-    [graph, slots, selection, highlightedAuthor],
+    () => toFlowNodes(graph, arrangement, slots, selection, highlightedAuthor),
+    [graph, arrangement, slots, selection, highlightedAuthor],
   )
   const edges = useMemo(() => toFlowEdges(graph, selection), [graph, selection])
 
   const fit = useCallback(
     (duration = 0) => {
       const canvas = containerRef.current
-      const viewport = fitViewport(graph, {
+      const viewport = fitViewport(graph, arrangement, {
         width: canvas?.clientWidth ?? 1000,
         height: canvas?.clientHeight ?? 600,
         top: RULER_HEIGHT,
@@ -95,7 +102,7 @@ function GraphCanvas({
       })
       void setViewport(viewport, { duration })
     },
-    [graph, setViewport],
+    [graph, arrangement, setViewport],
   )
 
   // Every newly loaded graph starts in the fit view, and stays fitted while the graph area
@@ -117,18 +124,19 @@ function GraphCanvas({
   useEffect(() => {
     const commit = focusSha ? graph.nodes.find((node) => node.sha === focusSha) : undefined
     if (!commit) return
-    const center = commitCenter(commit)
+    const center = commitCenter(commit, arrangement.rowOf)
     setCenter(center.x, center.y, { zoom: Math.max(getZoom(), 0.8), duration: 400 })
-  }, [focusSha, graph, setCenter, getZoom])
+  }, [focusSha, graph, arrangement, setCenter, getZoom])
 
   /** Jump to a branch: its lane becomes the top row, its newest commit centred. */
   const goToLane = (laneId: number) => {
     userMoved.current = true
     const zoom = Math.max(getZoom(), MIN_JUMP_ZOOM)
-    const width = containerRef.current?.clientWidth ?? 1000
-    void setViewport(laneViewport(graph, laneId, { width, top: RULER_HEIGHT }, zoom), {
-      duration: 350,
-    })
+    const canvas = containerRef.current
+    const size = { width: canvas?.clientWidth ?? 1000, height: canvas?.clientHeight ?? 600 }
+    const placement = layout === 'centered' ? 'middle' : 'top'
+    const viewport = laneViewport(graph, arrangement, laneId, { ...size, top: RULER_HEIGHT }, zoom, placement)
+    void setViewport(viewport, { duration: 350 })
   }
   const defaultLane = graph.lanes.find((lane) => lane.kind === 'default')
 
@@ -154,7 +162,7 @@ function GraphCanvas({
   return (
     <div className="graph-panel">
       <aside className="lane-column" aria-label="Branches" ref={columnRef}>
-        <LaneLabels graph={graph} onSelectLane={goToLane} />
+        <LaneLabels arrangement={arrangement} onSelectLane={goToLane} onShowFinished={onShowFinished} />
         <div className="lane-column-header" style={{ height: RULER_HEIGHT }}>
           Branches <span className="lane-count">{graph.lanes.length}</span>
           {defaultLane && (
@@ -170,7 +178,7 @@ function GraphCanvas({
         </div>
       </aside>
       <div className="graph-canvas" ref={containerRef}>
-        <LaneBands graph={graph} />
+        <LaneBands graph={graph} arrangement={arrangement} />
         <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -227,16 +235,16 @@ function GraphCanvas({
   )
 }
 
-/** Alternating lane stripes and day separators, drawn behind the graph and kept in sync with it. */
-function LaneBands({ graph }: { graph: Graph }) {
+/** Alternating row stripes and day separators, drawn behind the graph and kept in sync with it. */
+function LaneBands({ graph, arrangement }: { graph: Graph; arrangement: Arrangement }) {
   const { x, y, zoom } = useViewport()
   return (
     <div className="lane-bands" aria-hidden>
-      {graph.lanes.map((lane) => (
+      {arrangement.rows.map((row, index) => (
         <div
-          key={lane.id}
-          className={`lane-band${lane.id % 2 ? ' is-odd' : ''}`}
-          style={{ top: y + (lane.id - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
+          key={index}
+          className={`lane-band${index % 2 ? ' is-odd' : ''}${row.kind === 'finished' ? ' is-finished' : ''}`}
+          style={{ top: y + (index - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
         />
       ))}
       {dayBoundaries(graph).map(({ x: graphX, key }) => (
@@ -246,42 +254,79 @@ function LaneBands({ graph }: { graph: Graph }) {
   )
 }
 
+/** Indentation per family-tree level in the branch column (capped so deep trees still fit). */
+const INDENT_PX = 12
+const MAX_INDENT_LEVELS = 5
+
 /** The fixed branch column: one row per lane, following the graph as you pan and zoom
- *  vertically, but never moving sideways, so names never cover commits. */
+ *  vertically, but never moving sideways, so names never cover commits. Names are indented by
+ *  their depth in the branch family tree. */
 function LaneLabels({
-  graph,
+  arrangement,
   onSelectLane,
+  onShowFinished,
 }: {
-  graph: Graph
+  arrangement: Arrangement
   onSelectLane: (laneId: number) => void
+  onShowFinished: () => void
 }) {
   const { y, zoom } = useViewport()
-  const visible = skipCrowded(graph.lanes, (lane) => y + lane.id * LANE_HEIGHT * zoom, MIN_LABEL_GAP)
+  const rows = arrangement.rows.map((row, index) => ({ row, index }))
+  const visible = skipCrowded(rows, ({ index }) => y + index * LANE_HEIGHT * zoom, MIN_LABEL_GAP)
   return (
     <div className="lane-labels">
-      {graph.lanes.map((lane) => (
+      {rows.map(({ row, index }) => (
         <div
-          key={`row-${lane.id}`}
-          className={`lane-row${lane.id % 2 ? ' is-odd' : ''}`}
-          style={{ top: y + (lane.id - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
+          key={`row-${index}`}
+          className={`lane-row${index % 2 ? ' is-odd' : ''}${row.kind === 'finished' ? ' is-finished' : ''}`}
+          style={{ top: y + (index - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
           aria-hidden
         />
       ))}
-      {visible.map(({ item: lane, position }) => (
-        <button
-          type="button"
-          key={lane.id}
-          className={`lane-label kind-${lane.kind}`}
-          style={{ top: position }}
-          onClick={() => onSelectLane(lane.id)}
-          title={`${lane.name} · ${lane.commit_count} commit${lane.commit_count === 1 ? '' : 's'} in this lane · click to jump to its latest commit`}
-        >
-          <span className="lane-name">{lane.name}</span>
-          {LANE_KIND_LABEL[lane.kind] && (
-            <span className="lane-kind">{LANE_KIND_LABEL[lane.kind]}</span>
-          )}
-        </button>
-      ))}
+      {visible.map(({ item: { row }, position }) => {
+        if (row.kind === 'finished') {
+          return (
+            <button
+              type="button"
+              key="finished"
+              className="lane-label finished-label"
+              style={{ top: position }}
+              onClick={onShowFinished}
+              title={`${row.lanes.length} merged branches folded into this row: ${row.lanes
+                .map((lane) => lane.name)
+                .join(', ')}. Click to show them.`}
+            >
+              <span aria-hidden>▸</span>
+              <span className="lane-name">
+                {row.lanes.length} merged branch{row.lanes.length === 1 ? '' : 'es'}
+              </span>
+            </button>
+          )
+        }
+        const lane = row.lane
+        const indent = Math.min(lane.depth, MAX_INDENT_LEVELS) * INDENT_PX
+        return (
+          <button
+            type="button"
+            key={lane.id}
+            className={`lane-label kind-${lane.kind}${lane.finished ? ' is-finished' : ''}`}
+            style={{ top: position, marginLeft: indent, maxWidth: `calc(100% - ${24 + indent}px)` }}
+            onClick={() => onSelectLane(lane.id)}
+            title={`${lane.name} · ${lane.commit_count} commit${lane.commit_count === 1 ? '' : 's'} in this lane · click to jump to its latest commit`}
+          >
+            {lane.depth > 0 && (
+              <span className="lane-branch-mark" aria-hidden>
+                ↳
+              </span>
+            )}
+            <span className="lane-name">{lane.name}</span>
+            {LANE_KIND_LABEL[lane.kind] && (
+              <span className="lane-kind">{LANE_KIND_LABEL[lane.kind]}</span>
+            )}
+            {lane.finished && lane.kind === 'branch' && <span className="lane-kind">merged</span>}
+          </button>
+        )
+      })}
     </div>
   )
 }
