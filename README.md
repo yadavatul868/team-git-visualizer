@@ -50,12 +50,35 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 | Search box | Type part of a repo's name or URL to pick one from `repos.json` (↑/↓, Enter), or paste any GitHub URL |
 | **Load** / **Refresh** | Fetch the latest branches and commits from GitHub |
 | **Window** | Last 7, 14 or 30 days (30 is the default and the maximum; capped at the newest 2,000 commits) |
-| **Branch priority** | Optional, e.g. `main, stage, dev`. These branches get the top lanes and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
+| **Layout** / **Show merged** | Centered on default (default) or Top-down; show or fold merged branches. Both are remembered in the browser. |
+| **Branch priority** | Optional, e.g. `main, stage, dev`. These branches come first (each followed by the branches made from it) and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
 | Author chips | Click to highlight one person's commits |
 | ☾ Dark / ☀ Light | Theme switch, top left. The app always opens light; your choice is remembered in the browser. |
 | Graph | Scroll (or drag) to move through branches; pinch, ⌘ + scroll or +/− to zoom; click a dot or a line for details |
 | **⌂ main** / branch names | In the branch column: jump to the default branch, or click any branch name to bring its lane to the top with its latest commit centred |
 | Fit view (⤢) | Zooms to show everything, but never smaller than about 7 branches tall. In bigger repos it shows the newest commits and the lanes around them. |
+
+## How branches are ordered
+
+The branch column is arranged like a family tree. Each branch sits directly below the branch it
+was branched off from, with the most recently created one closest. Branches of branches nest under
+their own parent. Under each branch name, a second line says where it came from, e.g.
+"↓ from main": the arrow points to that branch's row (hidden when zoomed far out; in the Top-down
+layout names are also indented by level). The branch priority list and then the default branch come
+first; branches whose starting point is older than the time window come last.
+
+**Merged branches fold away.** A branch that's already merged (merged and deleted, or fully merged
+into another branch) is folded into one hatched "N merged branches" row at the top. Its commits
+are still shown there, smaller. Click that row or tick **Show merged** to expand them. These never
+fold:
+- the default branch and your priority branches
+- branches that receive merges from other branches (like `dev`)
+- anything not merged yet, however old: those are the branches to notice
+
+**Layout.** By default the graph is **centered on the default branch**: `main` sits in the middle,
+with its branch families alternating above and below it (newest nearest). The first view and Fit
+view keep `main` mid-screen. **Top-down** (default branch first, families stacked below) is available
+in the Layout selector.
 
 ## One name per person
 

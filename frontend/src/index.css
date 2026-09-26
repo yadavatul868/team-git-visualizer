@@ -601,6 +601,54 @@ a.nav-title:hover {
 .lane-row.is-odd {
   background: var(--lane-band);
 }
+/* The folded "merged branches" row: hatched so it reads as a summary, not a branch */
+.lane-row.is-finished,
+.lane-band.is-finished {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 8px,
+    var(--lane-band) 8px 16px
+  );
+  border-top: 1px dashed var(--baseline);
+}
+.lane-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.lane-origin {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.lane-label.finished-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  border-style: dashed;
+  color: var(--text-secondary);
+}
+.lane-label.is-finished .lane-name {
+  color: var(--text-secondary);
+}
+/* Commits on folded branches: smaller and quieter */
+.commit-node.is-folded {
+  opacity: 0.55;
+  transform: scale(0.8);
+}
+.commit-node.is-folded .commit-label,
+.commit-node.is-folded .commit-refs {
+  display: none;
+}
+.toggle-field input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--cta);
+}
 .graph-panel .react-flow {
   --xy-background-color: transparent;
   background: transparent;
@@ -666,8 +714,10 @@ button.lane-label:hover {
   left: 12px;
   max-width: calc(100% - 24px);
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
   transform: translateY(-50%);
   padding: 3px 9px;
   border: 1px solid var(--border);

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { relativeTime } from '../lib/format'
 import type { Theme } from '../lib/theme'
+import type { LaneLayout } from '../lib/rows'
 import { WINDOW_OPTIONS } from '../lib/window'
 import type { RepoSuggestion } from '../types'
 
@@ -25,6 +26,12 @@ interface TopBarProps {
   onManagePeople: (() => void) | null
   theme: Theme
   onToggleTheme: () => void
+  layout: LaneLayout
+  onLayoutChange: (layout: LaneLayout) => void
+  /** Merged branches that can be folded into one row. */
+  finishedCount: number
+  showFinished: boolean
+  onShowFinishedChange: (show: boolean) => void
 }
 
 export function TopBar(props: TopBarProps) {
@@ -202,7 +209,7 @@ export function TopBar(props: TopBarProps) {
           </label>
           <label
             className="field"
-            title="Branches listed here get the top lanes and win shared commits, e.g. main, stage, dev"
+            title="Branches listed here come first (each followed by the branches made from it) and win shared commits, e.g. main, stage, dev"
           >
             <span>Branch priority</span>
             <input
@@ -214,6 +221,29 @@ export function TopBar(props: TopBarProps) {
               onKeyDown={(event) => event.key === 'Enter' && applyPriority()}
             />
           </label>
+          <label className="field" title="How branches are stacked">
+            <span>Layout</span>
+            <select
+              value={props.layout}
+              onChange={(event) => props.onLayoutChange(event.target.value as LaneLayout)}
+            >
+              <option value="centered">Centered on default</option>
+              <option value="top-down">Top-down</option>
+            </select>
+          </label>
+          {props.finishedCount > 0 && (
+            <label
+              className="field toggle-field"
+              title="Merged branches are folded into one row unless shown"
+            >
+              <input
+                type="checkbox"
+                checked={props.showFinished}
+                onChange={(event) => props.onShowFinishedChange(event.target.checked)}
+              />
+              <span>Show merged ({props.finishedCount})</span>
+            </label>
+          )}
           {props.onManagePeople && (
             <button
               type="button"

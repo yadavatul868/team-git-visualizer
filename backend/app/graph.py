@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.gitlog import RawCommit, read_log
 from app.identity import PeopleIndex
-from app.lanes import assign_lanes, display_order
+from app.lanes import assign_lanes, display_order, finished_lanes
 from app.models import (
     AuthorStat,
     EdgeKind,
@@ -76,8 +76,23 @@ def build_graph(
     tips = {branch.name: branch.tip_sha for branch in branches}
     assignments, lane_index = assign_lanes(commits, tips, default_branch, priority)
     x_of = {commit.sha: len(commits) - 1 - rank for rank, commit in enumerate(commits)}
-    order = display_order(assignments, x_of, priority)
+    by_sha = {commit.sha: commit for commit in commits}
+    order, tree_parent = display_order(assignments, x_of, priority, lane_index, by_sha)
     lane_id = {index: position for position, index in enumerate(order)}
+    protected = {
+        index
+        for index, lane in enumerate(assignments)
+        if lane.kind == "default" or lane.name in priority
+    }
+    finished = finished_lanes(assignments, order, tree_parent, tips, commits, lane_index, protected)
+
+    def depth(index: int) -> int:
+        level = 0
+        while index in tree_parent:
+            index = tree_parent[index]
+            level += 1
+        return level
+
     lane_of = {sha: lane_id[index] for sha, index in lane_index.items()}
 
     refs: dict[str, list[str]] = {}
@@ -109,6 +124,9 @@ def build_graph(
             name=assignments[index].name,
             kind=assignments[index].kind,
             commit_count=len(assignments[index].shas),
+            parent=lane_id[tree_parent[index]] if index in tree_parent else None,
+            depth=depth(index),
+            finished=index in finished,
         )
         for index in order
     ]

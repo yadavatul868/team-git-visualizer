@@ -126,15 +126,116 @@ def display_order(
     lanes: list[LaneAssignment],
     x_of: dict[str, int],
     priority: list[str],
-) -> list[int]:
-    """Lane indices top to bottom: user priority, then the default branch, then by first commit."""
+    lane_of: dict[str, int],
+    by_sha: dict[str, RawCommit],
+) -> tuple[list[int], dict[int, int]]:
+    """Lane indices top to bottom, arranged as a family tree, plus each nested lane's parent.
 
-    def key(index: int) -> tuple[int, int]:
+    Each branch sits directly below the branch it was branched off from (the lane holding the
+    parent of its oldest commit), most recently branched first, so new work stays next to its
+    base. Branches of branches nest under their own parent. Roots, in order: the user's
+    priority branches, the default branch, then branches whose base is outside the time
+    window (oldest first).
+    """
+    first_x = {index: min(x_of[sha] for sha in lane.shas) for index, lane in enumerate(lanes)}
+    parent: dict[int, int] = {}
+    branched_at: dict[int, int] = {}
+    for index, lane in enumerate(lanes):
+        oldest = min(lane.shas, key=x_of.__getitem__)
+        parents = by_sha[oldest].parents
+        if parents and lane_of.get(parents[0], index) != index:
+            parent[index] = lane_of[parents[0]]
+            branched_at[index] = x_of[parents[0]]
+
+    pinned = [
+        index
+        for name in dict.fromkeys(priority)
+        for index, lane in enumerate(lanes)
+        if lane.name == name and lane.kind in ("default", "branch")
+    ]
+    defaults = [i for i, lane in enumerate(lanes) if lane.kind == "default" and i not in pinned]
+    fixed_roots = pinned + defaults
+
+    children: dict[int, list[int]] = {}
+    for index, parent_index in parent.items():
+        if index not in fixed_roots:
+            children.setdefault(parent_index, []).append(index)
+    for siblings in children.values():
+        siblings.sort(key=lambda i: (-branched_at[i], -first_x[i]))  # most recent first
+    other_roots = sorted(
+        (i for i in range(len(lanes)) if i not in fixed_roots and i not in parent),
+        key=first_x.__getitem__,
+    )
+
+    tree_parent = {i: p for i, p in parent.items() if i not in fixed_roots}
+    order: list[int] = []
+    placed: set[int] = set()
+    # Iterative depth-first walk (repos can have hundreds of lanes); every lane is placed once.
+    for root in [*fixed_roots, *other_roots, *range(len(lanes))]:
+        stack = [root]
+        while stack:
+            index = stack.pop()
+            if index in placed:
+                continue
+            placed.add(index)
+            order.append(index)
+            stack.extend(reversed(children.get(index, [])))
+    return order, tree_parent
+
+
+def finished_lanes(
+    lanes: list[LaneAssignment],
+    order: list[int],
+    tree_parent: dict[int, int],
+    tips: dict[str, str],
+    commits: list[RawCommit],
+    lane_of: dict[str, int],
+    protected: set[int],
+) -> set[int]:
+    """Lanes whose work is done and can be folded away: merged into another branch (or merged
+    and deleted), not an integration branch themselves, and with only finished sub-branches.
+
+    Merged means the branch tip is reachable from another branch *through a merge*; a branch
+    that was merely branched off from (its tip is on the other branch's first-parent chain)
+    doesn't count. Unmerged branches are never finished, however old: they are the ones to
+    notice. `protected` lanes (default and priority branches) are never finished.
+    """
+    by_sha = {commit.sha: commit for commit in commits}
+    ancestors = {name: _ancestors(tip, by_sha) for name, tip in tips.items()}
+    first_parents = {name: set(first_parent_chain(tip, by_sha)) for name, tip in tips.items()}
+
+    def merged(index: int) -> bool:
         lane = lanes[index]
-        if lane.kind in ("default", "branch") and lane.name in priority:
-            return (0, priority.index(lane.name))
-        if lane.kind == "default":
-            return (1, 0)
-        return (2, min(x_of[sha] for sha in lane.shas))
+        if lane.kind in ("deleted", "unlabelled"):
+            return True
+        tip = tips.get(lane.name)
+        if lane.kind != "branch" or tip not in by_sha:
+            return False
+        return any(
+            tip in ancestors[other] and tip not in first_parents[other]
+            for other in tips
+            if other != lane.name
+        )
 
-    return sorted(range(len(lanes)), key=key)
+    def integrates(index: int) -> bool:
+        """Receives merges from anything other than the branch it came from (e.g. dev)."""
+        base = tree_parent.get(index)
+        return any(
+            lane_of.get(merged_parent) not in (None, base, index)
+            for sha in lanes[index].shas
+            for merged_parent in by_sha[sha].parents[1:]
+        )
+
+    children: dict[int, list[int]] = {}
+    for index, parent_index in tree_parent.items():
+        children.setdefault(parent_index, []).append(index)
+    finished: set[int] = set()
+    for index in reversed(order):  # children come after parents in `order`
+        if (
+            index not in protected
+            and merged(index)
+            and not integrates(index)
+            and all(child in finished for child in children.get(index, []))
+        ):
+            finished.add(index)
+    return finished

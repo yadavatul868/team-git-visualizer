@@ -10,6 +10,7 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
   if (commit.is_merge) classes.push('is-merge')
   if (data.selected) classes.push('is-selected')
   if (data.dimmed) classes.push('is-dimmed')
+  if (data.folded) classes.push('is-folded')
 
   return (
     <div className={classes.join(' ')} style={{ '--node-color': data.color } as CSSProperties}>

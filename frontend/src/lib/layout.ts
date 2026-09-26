@@ -3,10 +3,11 @@ import type { Edge, Node } from '@xyflow/react'
 import type { EdgeKind, Graph, GraphNode, Selection } from '../types'
 import { authorColor, type AuthorSlots } from './colors'
 import { initials } from './format'
+import type { Arrangement } from './rows'
 
 /** Horizontal distance between consecutive commits. */
 export const COLUMN_WIDTH = 120
-/** Vertical distance between lanes. */
+/** Vertical distance between rows (one row per branch, plus one for folded branches). */
 export const LANE_HEIGHT = 96
 /** Diameter of a commit dot. */
 export const NODE_SIZE = 30
@@ -19,6 +20,8 @@ export interface CommitNodeData extends Record<string, unknown> {
   initials: string
   selected: boolean
   dimmed: boolean
+  /** On a folded (finished) branch: drawn smaller and quieter. */
+  folded: boolean
 }
 
 export interface GitEdgeData extends Record<string, unknown> {
@@ -29,18 +32,25 @@ export type CommitFlowNode = Node<CommitNodeData, 'commit'>
 export type GitFlowEdge = Edge<GitEdgeData, 'git'>
 
 /** Centre of a commit in graph coordinates. */
-export function commitCenter(commit: Pick<GraphNode, 'x' | 'lane'>): { x: number; y: number } {
-  return { x: ORIGIN_X + commit.x * COLUMN_WIDTH, y: commit.lane * LANE_HEIGHT }
+export function commitCenter(
+  commit: Pick<GraphNode, 'x' | 'lane'>,
+  rowOf: Arrangement['rowOf'],
+): { x: number; y: number } {
+  return { x: ORIGIN_X + commit.x * COLUMN_WIDTH, y: (rowOf.get(commit.lane) ?? 0) * LANE_HEIGHT }
 }
 
 export function toFlowNodes(
   graph: Graph,
+  arrangement: Arrangement,
   slots: AuthorSlots,
   selection: Selection | null,
   highlightedAuthor: string | null,
 ): CommitFlowNode[] {
+  const folded = new Set(
+    arrangement.rows.flatMap((row) => (row.kind === 'finished' ? row.lanes.map((l) => l.id) : [])),
+  )
   return graph.nodes.map((commit) => {
-    const center = commitCenter(commit)
+    const center = commitCenter(commit, arrangement.rowOf)
     return {
       id: commit.sha,
       type: 'commit',
@@ -56,6 +66,7 @@ export function toFlowNodes(
         initials: initials(commit.author.name),
         selected: selection?.type === 'node' && selection.sha === commit.sha,
         dimmed: highlightedAuthor !== null && commit.author.key !== highlightedAuthor,
+        folded: folded.has(commit.lane),
       },
     }
   })
@@ -96,7 +107,7 @@ export function gitEdgePath(
   return `M ${sourceX},${sourceY} C ${sourceX + bend / 2},${sourceY} ${sourceX + bend / 2},${targetY} ${end},${targetY} L ${targetX},${targetY}`
 }
 
-/** Fit view never zooms out further than this many lanes filling the graph's height. */
+/** Fit view never zooms out further than this many rows filling the graph's height. */
 export const MAX_LANES_IN_FIT = 7
 
 export interface FitOptions {
@@ -111,42 +122,55 @@ export interface FitOptions {
 
 /**
  * The "fit view" viewport: show everything when that keeps lanes readable, otherwise zoom only
- * as far out as MAX_LANES_IN_FIT lanes, showing the newest commits and the top lanes (scrolled
- * down just enough that the lane with the newest commit is in view).
+ * as far out as MAX_LANES_IN_FIT rows, showing the newest commits: centred on the default
+ * branch in the centered layout, otherwise the top rows (scrolled down just enough that the row
+ * with the newest commit is in view).
  */
 export function fitViewport(
   graph: Graph,
+  arrangement: Arrangement,
   { width, height, top, left, right }: FitOptions,
 ): { x: number; y: number; zoom: number } {
   const span = Math.max(1, graph.nodes.length - 1) * COLUMN_WIDTH
   const usableHeight = Math.max(1, height - top - LANE_HEIGHT * 0.25)
   const fitWidth = (width - left - right) / span
-  const fitHeight = usableHeight / (Math.max(1, graph.lanes.length) * LANE_HEIGHT)
+  const fitHeight = usableHeight / (Math.max(1, arrangement.rows.length) * LANE_HEIGHT)
   const readable = usableHeight / (MAX_LANES_IN_FIT * LANE_HEIGHT)
   const zoom = Math.min(1, Math.max(Math.min(fitWidth, fitHeight), readable))
   const fitsHorizontally = span * zoom <= width - left - right
-  const lanesInView = Math.max(1, Math.floor(usableHeight / (LANE_HEIGHT * zoom)))
-  const newestLane = graph.nodes.at(-1)?.lane ?? 0
-  const firstLane = Math.max(0, newestLane - lanesInView + 1)
+  const rowsInView = Math.max(1, Math.floor(usableHeight / (LANE_HEIGHT * zoom)))
+  const newest = graph.nodes.at(-1)
+  const newestRow = newest ? (arrangement.rowOf.get(newest.lane) ?? 0) : 0
+  const lastFirstRow = Math.max(0, arrangement.rows.length - rowsInView)
+  const firstRow =
+    arrangement.anchorRow !== null && rowsInView < arrangement.rows.length
+      ? // Centered layout: keep the default branch in the middle of the view.
+        Math.min(lastFirstRow, Math.max(0, arrangement.anchorRow - Math.floor(rowsInView / 2)))
+      : Math.max(0, newestRow - rowsInView + 1)
   return {
     x: fitsHorizontally ? left - ORIGIN_X * zoom : width - right - (ORIGIN_X + span) * zoom,
-    y: top + (0.6 - firstLane) * LANE_HEIGHT * zoom,
+    y: top + (0.6 - firstRow) * LANE_HEIGHT * zoom,
     zoom,
   }
 }
 
-/** Viewport showing `laneId` as the top row, with its newest commit centred horizontally. */
+/** Viewport bringing a lane into view (as the top row, or mid-height for the centred layout)
+ *  with its newest commit centred horizontally. */
 export function laneViewport(
   graph: Graph,
+  arrangement: Arrangement,
   laneId: number,
-  { width, top }: Pick<FitOptions, 'width' | 'top'>,
+  { width, height, top }: Pick<FitOptions, 'width' | 'height' | 'top'>,
   zoom: number,
+  placement: 'top' | 'middle',
 ): { x: number; y: number; zoom: number } {
   const newest = graph.nodes.filter((node) => node.lane === laneId).at(-1) // nodes are oldest → newest
-  const centerX = newest ? commitCenter(newest).x : ORIGIN_X
+  const centerX = newest ? commitCenter(newest, arrangement.rowOf).x : ORIGIN_X
+  const row = arrangement.rowOf.get(laneId) ?? 0
+  const screenY = placement === 'middle' ? top + (height - top) / 2 : top + 0.6 * LANE_HEIGHT * zoom
   return {
     x: width / 2 - centerX * zoom,
-    y: top + (0.6 - laneId) * LANE_HEIGHT * zoom,
+    y: screenY - row * LANE_HEIGHT * zoom,
     zoom,
   }
 }
