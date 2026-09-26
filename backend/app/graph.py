@@ -4,7 +4,14 @@ from pathlib import Path
 
 from app.gitlog import RawCommit, read_log
 from app.identity import PeopleIndex
-from app.lanes import assign_lanes, display_order, finished_lanes
+from app.lanes import (
+    assign_lanes,
+    display_order,
+    finished_lanes,
+    integration_lanes,
+    lane_bases,
+    merged_lanes,
+)
 from app.models import (
     AuthorStat,
     EdgeKind,
@@ -77,14 +84,20 @@ def build_graph(
     assignments, lane_index = assign_lanes(commits, tips, default_branch, priority)
     x_of = {commit.sha: len(commits) - 1 - rank for rank, commit in enumerate(commits)}
     by_sha = {commit.sha: commit for commit in commits}
-    order, tree_parent = display_order(assignments, x_of, priority, lane_index, by_sha)
+    base, branched_at = lane_bases(assignments, x_of, lane_index, by_sha)
+    merged = merged_lanes(assignments, tips, commits)
+    integrating = integration_lanes(assignments, base, commits, lane_index)
+    # Merged-back branches move away from their parent; active work stays closest.
+    order, tree_parent = display_order(
+        assignments, x_of, priority, base, branched_at, settled=merged - integrating
+    )
     lane_id = {index: position for position, index in enumerate(order)}
     protected = {
         index
         for index, lane in enumerate(assignments)
         if lane.kind == "default" or lane.name in priority
     }
-    finished = finished_lanes(assignments, order, tree_parent, tips, commits, lane_index, protected)
+    finished = finished_lanes(order, tree_parent, merged, integrating, protected)
 
     def depth(index: int) -> int:
         level = 0
