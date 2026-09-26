@@ -50,6 +50,7 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 | Search box | Type part of a repo's name or URL to pick one from `repos.json` (↑/↓, Enter), or paste any GitHub URL |
 | **Load** / **Refresh** | Fetch the latest branches and commits from GitHub |
 | **Window** | Last 7, 14 or 30 days (default 30), or **All history**. Capped at the newest 2,000 commits. |
+| **Show deleted** | Off by default. Deleted branches in the graph are always merged-then-deleted (a branch deleted without merging has no reachable commits, so it's never shown), so their work is already in the branch they merged into. Tick to show them anyway. |
 | **Layout** / **Show merged** | Centered on default (default) or Top-down; show or fold merged branches. Both are remembered in the browser. |
 | **Branch priority** | Optional, e.g. `main, stage, dev`. These branches come first (each followed by the branches made from it) and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
 | Author chips | Click to highlight one person's commits |
