@@ -611,12 +611,24 @@ a.nav-title:hover {
   );
   border-top: 1px dashed var(--baseline);
 }
-.lane-branch-mark {
-  flex: none;
+.lane-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.lane-origin {
+  overflow: hidden;
   color: var(--text-muted);
-  font-weight: 400;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 button.lane-label.finished-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
   border-style: dashed;
   color: var(--text-secondary);
 }
@@ -702,8 +714,10 @@ button.lane-label:hover {
   left: 12px;
   max-width: calc(100% - 24px);
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
   transform: translateY(-50%);
   padding: 3px 9px;
   border: 1px solid var(--border);

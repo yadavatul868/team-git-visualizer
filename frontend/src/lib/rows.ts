@@ -22,7 +22,7 @@ export function arrangeRows(graph: Graph, layout: LaneLayout, showFinished: bool
   const ordered = layout === 'centered' ? centered(visible) : visible
 
   const rows: Row[] = ordered.map((lane) => ({ kind: 'lane', lane }))
-  if (hidden.length > 0) rows.push({ kind: 'finished', lanes: hidden })
+  if (hidden.length > 0) rows.unshift({ kind: 'finished', lanes: hidden }) // folded row on top
 
   const rowOf = new Map<number, number>()
   rows.forEach((row, index) => {

@@ -62,11 +62,13 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 
 The branch column is arranged like a family tree. Each branch sits directly below the branch it
 was branched off from, with the most recently created one closest. Branches of branches nest under
-their own parent and are indented (↳). The branch priority list and then the default branch come
+their own parent. Under each branch name, a second line says where it came from, e.g.
+"↓ from main": the arrow points to that branch's row (hidden when zoomed far out; in the Top-down
+layout names are also indented by level). The branch priority list and then the default branch come
 first; branches whose starting point is older than the time window come last.
 
 **Merged branches fold away.** A branch that's already merged (merged and deleted, or fully merged
-into another branch) is folded into one hatched "N merged branches" row at the bottom. Its commits
+into another branch) is folded into one hatched "N merged branches" row at the top. Its commits
 are still shown there, smaller. Click that row or tick **Show merged** to expand them. These never
 fold:
 - the default branch and your priority branches

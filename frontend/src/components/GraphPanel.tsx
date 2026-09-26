@@ -162,7 +162,13 @@ function GraphCanvas({
   return (
     <div className="graph-panel">
       <aside className="lane-column" aria-label="Branches" ref={columnRef}>
-        <LaneLabels arrangement={arrangement} onSelectLane={goToLane} onShowFinished={onShowFinished} />
+        <LaneLabels
+          graph={graph}
+          arrangement={arrangement}
+          layout={layout}
+          onSelectLane={goToLane}
+          onShowFinished={onShowFinished}
+        />
         <div className="lane-column-header" style={{ height: RULER_HEIGHT }}>
           Branches <span className="lane-count">{graph.lanes.length}</span>
           {defaultLane && (
@@ -254,23 +260,30 @@ function LaneBands({ graph, arrangement }: { graph: Graph; arrangement: Arrangem
   )
 }
 
-/** Indentation per family-tree level in the branch column (capped so deep trees still fit). */
+/** Indentation per family-tree level in the top-down layout (capped so deep trees still fit). */
 const INDENT_PX = 12
 const MAX_INDENT_LEVELS = 5
+/** Below this on-screen row height there's only room for the branch name, not its origin. */
+const MIN_ROW_HEIGHT_FOR_ORIGIN = 56
 
 /** The fixed branch column: one row per lane, following the graph as you pan and zoom
- *  vertically, but never moving sideways, so names never cover commits. Names are indented by
- *  their depth in the branch family tree. */
+ *  vertically, but never moving sideways, so names never cover commits. Under each name, a
+ *  second line says which branch it came from, with an arrow pointing to that branch's row. */
 function LaneLabels({
+  graph,
   arrangement,
+  layout,
   onSelectLane,
   onShowFinished,
 }: {
+  graph: Graph
   arrangement: Arrangement
+  layout: LaneLayout
   onSelectLane: (laneId: number) => void
   onShowFinished: () => void
 }) {
   const { y, zoom } = useViewport()
+  const showOrigin = LANE_HEIGHT * zoom >= MIN_ROW_HEIGHT_FOR_ORIGIN
   const rows = arrangement.rows.map((row, index) => ({ row, index }))
   const visible = skipCrowded(rows, ({ index }) => y + index * LANE_HEIGHT * zoom, MIN_LABEL_GAP)
   return (
@@ -304,7 +317,12 @@ function LaneLabels({
           )
         }
         const lane = row.lane
-        const indent = Math.min(lane.depth, MAX_INDENT_LEVELS) * INDENT_PX
+        const indent =
+          layout === 'top-down' ? Math.min(lane.depth, MAX_INDENT_LEVELS) * INDENT_PX : 0
+        const parent = lane.parent !== null ? graph.lanes[lane.parent] : undefined
+        const parentRow = lane.parent !== null ? arrangement.rowOf.get(lane.parent) : undefined
+        const thisRow = arrangement.rowOf.get(lane.id) ?? 0
+        const arrow = parentRow === undefined ? '' : parentRow < thisRow ? '↑' : '↓'
         return (
           <button
             type="button"
@@ -312,18 +330,20 @@ function LaneLabels({
             className={`lane-label kind-${lane.kind}${lane.finished ? ' is-finished' : ''}`}
             style={{ top: position, marginLeft: indent, maxWidth: `calc(100% - ${24 + indent}px)` }}
             onClick={() => onSelectLane(lane.id)}
-            title={`${lane.name} · ${lane.commit_count} commit${lane.commit_count === 1 ? '' : 's'} in this lane · click to jump to its latest commit`}
+            title={`${lane.name}${parent ? ` · branched off ${parent.name}` : ''} · ${lane.commit_count} commit${lane.commit_count === 1 ? '' : 's'} in this lane · click to jump to its latest commit`}
           >
-            {lane.depth > 0 && (
-              <span className="lane-branch-mark" aria-hidden>
-                ↳
+            <span className="lane-title">
+              <span className="lane-name">{lane.name}</span>
+              {LANE_KIND_LABEL[lane.kind] && (
+                <span className="lane-kind">{LANE_KIND_LABEL[lane.kind]}</span>
+              )}
+              {lane.finished && lane.kind === 'branch' && <span className="lane-kind">merged</span>}
+            </span>
+            {parent && showOrigin && (
+              <span className="lane-origin">
+                <span aria-hidden>{arrow}</span> from {parent.name}
               </span>
             )}
-            <span className="lane-name">{lane.name}</span>
-            {LANE_KIND_LABEL[lane.kind] && (
-              <span className="lane-kind">{LANE_KIND_LABEL[lane.kind]}</span>
-            )}
-            {lane.finished && lane.kind === 'branch' && <span className="lane-kind">merged</span>}
           </button>
         )
       })}
