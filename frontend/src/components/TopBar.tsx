@@ -30,6 +30,10 @@ interface TopBarProps {
   onLayoutChange: (layout: LaneLayout) => void
   /** Merged branches that can be folded into one row. */
   finishedCount: number
+  /** Branches merged and then deleted (their commits are already in the target branch). */
+  deletedCount: number
+  showDeleted: boolean
+  onShowDeletedChange: (show: boolean) => void
   showFinished: boolean
   onShowFinishedChange: (show: boolean) => void
 }
@@ -242,6 +246,19 @@ export function TopBar(props: TopBarProps) {
                 onChange={(event) => props.onShowFinishedChange(event.target.checked)}
               />
               <span>Show merged ({props.finishedCount})</span>
+            </label>
+          )}
+          {props.deletedCount > 0 && (
+            <label
+              className="field toggle-field"
+              title="Branches that were merged and then deleted. Their commits are already in the branch they merged into, so hiding them loses nothing."
+            >
+              <input
+                type="checkbox"
+                checked={props.showDeleted}
+                onChange={(event) => props.onShowDeletedChange(event.target.checked)}
+              />
+              <span>Show deleted ({props.deletedCount})</span>
             </label>
           )}
           {props.onManagePeople && (
