@@ -47,7 +47,11 @@ def test_graph(client: TestClient) -> None:
 def test_graph_priority_param(client: TestClient) -> None:
     params = {"repo": "acme/demo", "days": 30, "priority": " dev , main "}
     lanes = client.get("/api/graph", params=params).json()["lanes"]
-    assert [lane["name"] for lane in lanes[:2]] == ["dev", "main"]
+    # Priority branches lead, each followed by the branches made from it. With dev first, dev
+    # also owns the initial commit, so stage (branched from it) is part of dev's family.
+    assert [lane["name"] for lane in lanes] == [
+        "dev", "feat-old", "feat/search", "feat/login", "stage", "main"
+    ]  # fmt: skip
 
 
 def test_commit_details_with_rename(client: TestClient, team_repo: RepoBuilder) -> None:

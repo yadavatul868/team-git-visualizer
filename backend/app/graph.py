@@ -76,7 +76,8 @@ def build_graph(
     tips = {branch.name: branch.tip_sha for branch in branches}
     assignments, lane_index = assign_lanes(commits, tips, default_branch, priority)
     x_of = {commit.sha: len(commits) - 1 - rank for rank, commit in enumerate(commits)}
-    order = display_order(assignments, x_of, priority)
+    by_sha = {commit.sha: commit for commit in commits}
+    order = display_order(assignments, x_of, priority, lane_index, by_sha)
     lane_id = {index: position for position, index in enumerate(order)}
     lane_of = {sha: lane_id[index] for sha, index in lane_index.items()}
 
