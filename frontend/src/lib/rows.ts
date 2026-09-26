@@ -1,7 +1,8 @@
 import type { Graph, Lane } from '../types'
 import { load, save } from './storage'
 
-/** How lanes are stacked. The backend sends lanes in top-down family-tree order. */
+/** How lanes are stacked (centered is the default). The backend sends lanes in top-down
+ *  family-tree order. */
 export type LaneLayout = 'top-down' | 'centered'
 
 /** One horizontal row of the graph: a single branch, or all folded (finished) branches. */
@@ -9,6 +10,8 @@ export type Row = { kind: 'lane'; lane: Lane } | { kind: 'finished'; lanes: Lane
 
 export interface Arrangement {
   rows: Row[]
+  /** Row to keep in the middle of the view (the default branch in the centered layout). */
+  anchorRow: number | null
   /** Lane id → row index. Folded lanes all map to the shared "finished" row. */
   rowOf: Map<number, number>
 }
@@ -25,12 +28,14 @@ export function arrangeRows(graph: Graph, layout: LaneLayout, showFinished: bool
   rows.forEach((row, index) => {
     for (const lane of row.kind === 'lane' ? [row.lane] : row.lanes) rowOf.set(lane.id, index)
   })
-  return { rows, rowOf }
+  const defaultLane = graph.lanes.find((lane) => lane.kind === 'default')
+  const anchorRow = layout === 'centered' && defaultLane ? (rowOf.get(defaultLane.id) ?? null) : null
+  return { rows, rowOf, anchorRow }
 }
 
 /**
- * Experimental: the default branch in the middle, its branch families alternating above and
- * below it (most recent nearest). Families above are mirrored, so each branch stays next to the
+ * The default branch in the middle, its branch families alternating above and below it (most
+ * recent nearest). Families above are mirrored, so each branch stays next to the
  * branch it came from and sub-branches sit further out.
  */
 function centered(lanes: Lane[]): Lane[] {
@@ -65,7 +70,7 @@ function centered(lanes: Lane[]): Lane[] {
 }
 
 export const savedLayout = (): LaneLayout =>
-  load<LaneLayout>('tgv:layout', 'top-down') === 'centered' ? 'centered' : 'top-down'
+  load<LaneLayout>('tgv:layout', 'centered') === 'top-down' ? 'top-down' : 'centered'
 export const saveLayout = (layout: LaneLayout) => save('tgv:layout', layout)
 export const savedShowFinished = (): boolean => load<boolean>('tgv:show-finished', false) === true
 export const saveShowFinished = (show: boolean) => save('tgv:show-finished', show)

@@ -227,8 +227,8 @@ export function TopBar(props: TopBarProps) {
               value={props.layout}
               onChange={(event) => props.onLayoutChange(event.target.value as LaneLayout)}
             >
+              <option value="centered">Centered on default</option>
               <option value="top-down">Top-down</option>
-              <option value="centered">Centered (experimental)</option>
             </select>
           </label>
           {props.finishedCount > 0 && (

@@ -122,8 +122,9 @@ export interface FitOptions {
 
 /**
  * The "fit view" viewport: show everything when that keeps lanes readable, otherwise zoom only
- * as far out as MAX_LANES_IN_FIT lanes, showing the newest commits and the top lanes (scrolled
- * down just enough that the lane with the newest commit is in view).
+ * as far out as MAX_LANES_IN_FIT rows, showing the newest commits: centred on the default
+ * branch in the centered layout, otherwise the top rows (scrolled down just enough that the row
+ * with the newest commit is in view).
  */
 export function fitViewport(
   graph: Graph,
@@ -140,7 +141,12 @@ export function fitViewport(
   const rowsInView = Math.max(1, Math.floor(usableHeight / (LANE_HEIGHT * zoom)))
   const newest = graph.nodes.at(-1)
   const newestRow = newest ? (arrangement.rowOf.get(newest.lane) ?? 0) : 0
-  const firstRow = Math.max(0, newestRow - rowsInView + 1)
+  const lastFirstRow = Math.max(0, arrangement.rows.length - rowsInView)
+  const firstRow =
+    arrangement.anchorRow !== null && rowsInView < arrangement.rows.length
+      ? // Centered layout: keep the default branch in the middle of the view.
+        Math.min(lastFirstRow, Math.max(0, arrangement.anchorRow - Math.floor(rowsInView / 2)))
+      : Math.max(0, newestRow - rowsInView + 1)
   return {
     x: fitsHorizontally ? left - ORIGIN_X * zoom : width - right - (ORIGIN_X + span) * zoom,
     y: top + (0.6 - firstRow) * LANE_HEIGHT * zoom,

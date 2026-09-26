@@ -50,7 +50,7 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 | Search box | Type part of a repo's name or URL to pick one from `repos.json` (↑/↓, Enter), or paste any GitHub URL |
 | **Load** / **Refresh** | Fetch the latest branches and commits from GitHub |
 | **Window** | Last 7, 14 or 30 days (30 is the default and the maximum; capped at the newest 2,000 commits) |
-| **Layout** / **Show merged** | Top-down (default) or Centered (experimental); show or fold merged branches. Both are remembered in the browser. |
+| **Layout** / **Show merged** | Centered on default (default) or Top-down; show or fold merged branches. Both are remembered in the browser. |
 | **Branch priority** | Optional, e.g. `main, stage, dev`. These branches come first (each followed by the branches made from it) and "own" shared commits. Use it if a commit shows up in an unexpected lane. It's remembered per repo. |
 | Author chips | Click to highlight one person's commits |
 | ☾ Dark / ☀ Light | Theme switch, top left. The app always opens light; your choice is remembered in the browser. |
@@ -73,9 +73,10 @@ fold:
 - branches that receive merges from other branches (like `dev`)
 - anything not merged yet, however old: those are the branches to notice
 
-**Layout: Centered (experimental)** puts the default branch in the middle, with its branch families
-alternating above and below it (newest nearest). It's there for comparison with the default
-top-down layout.
+**Layout.** By default the graph is **centered on the default branch**: `main` sits in the middle,
+with its branch families alternating above and below it (newest nearest). The first view and Fit
+view keep `main` mid-screen. **Top-down** (default branch first, families stacked below) is available
+in the Layout selector.
 
 ## One name per person
 
