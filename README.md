@@ -140,5 +140,7 @@ cd backend && uv run pytest && uv run ruff check .    # backend tests + lint
 cd frontend && npm test && npm run build && npm run lint   # unit tests, type-check, build, lint
 ```
 
-- `backend/` is a FastAPI app. It keeps bare clones in `.cache/repos/` (git-ignored).
+- `backend/` is a FastAPI app. It keeps bare repo clones and GitHub identity lookups in
+  `~/.cache/team-git-visualizer/`, outside the project, so cloud-synced folders like OneDrive don't
+  upload them. Override with `CACHE_DIR` / `IDENTITY_DIR`.
 - `frontend/` is React + Vite + React Flow. Vite proxies `/api` to the backend on :8000.

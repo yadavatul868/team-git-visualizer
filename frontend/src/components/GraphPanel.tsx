@@ -11,7 +11,7 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 
 import type { AuthorSlots } from '../lib/colors'
 import { LEVELS, compact, levelForZoom, zoomToExpand, type Compaction } from '../lib/compact'
@@ -102,10 +102,15 @@ function GraphCanvas({
   const columnRef = useRef<HTMLElement>(null)
 
   // Zoom level → how much of the time axis is compacted (see lib/compact.ts).
-  const zoom = useStore((state) => state.transform[2])
-  const [level, setLevel] = useState(0)
-  const zoomLevel = levelForZoom(zoom, level)
-  if (zoomLevel !== level) setLevel(zoomLevel) // derived from zoom, with hysteresis
+  // Subscribing to the level (not the raw zoom) re-renders only when a level boundary is
+  // crossed; the ref carries the current level for the hysteresis.
+  const levelRef = useRef(0)
+  const level = useStore(
+    useCallback((state: { transform: [number, number, number] }) => levelForZoom(state.transform[2], levelRef.current), []),
+  )
+  useEffect(() => {
+    levelRef.current = level
+  }, [level])
 
   const keep = useMemo(() => keptCommits(selection, focusSha), [selection, focusSha])
   const compaction = useMemo(
@@ -120,6 +125,8 @@ function GraphCanvas({
     () => toFlowEdges(graph, compaction, selection),
     [graph, compaction, selection],
   )
+
+  const days = useMemo(() => dayBoundaries(compaction), [compaction])
 
   const canvasSize = () => ({
     width: containerRef.current?.clientWidth ?? 1000,
@@ -242,7 +249,7 @@ function GraphCanvas({
     onSelect({ type: 'blob', id: node.id, shas: commits.map((commit) => commit.sha) })
     userMoved.current = true
     const targetZoom = Math.max(getZoom(), zoomToExpand(commits.length))
-    setLevel(levelForZoom(targetZoom))
+    levelRef.current = levelForZoom(targetZoom)
     pendingFocus.current = commits[Math.floor(commits.length / 2)].sha
     const { x, y } = getViewport()
     void setViewport({ x, y, zoom: targetZoom })
@@ -280,7 +287,7 @@ function GraphCanvas({
         </div>
       </aside>
       <div className="graph-canvas" ref={containerRef}>
-        <LaneBands compaction={compaction} arrangement={arrangement} />
+        <LaneBands days={days} arrangement={arrangement} />
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -298,6 +305,7 @@ function GraphCanvas({
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
+          onlyRenderVisibleElements
           minZoom={0.1}
           maxZoom={2.5}
           colorMode={theme}
@@ -331,36 +339,58 @@ function GraphCanvas({
             maskColor="var(--minimap-mask)"
           />
         </ReactFlow>
-        <DateRuler compaction={compaction} />
+        <DateRuler days={days} />
       </div>
     </div>
   )
 }
 
+type DayBoundary = { x: number; key: string; label: string }
+
+/** Row indices currently on screen (plus one either side), so off-screen rows aren't drawn. */
+function useVisibleRows(rowCount: number): [number, number] {
+  const { y, zoom } = useViewport()
+  const height = useStore((state) => state.height)
+  const rowHeight = LANE_HEIGHT * zoom
+  const first = Math.max(0, Math.floor(-y / rowHeight) - 1)
+  const last = Math.min(rowCount - 1, Math.ceil((height - y) / rowHeight) + 1)
+  return [first, last]
+}
+
 /** Alternating row stripes and day separators, drawn behind the graph and kept in sync with it. */
-function LaneBands({
-  compaction,
+const LaneBands = memo(function LaneBands({
+  days,
   arrangement,
 }: {
-  compaction: Compaction
+  days: DayBoundary[]
   arrangement: Arrangement
 }) {
   const { x, y, zoom } = useViewport()
+  const width = useStore((state) => state.width)
+  const [first, last] = useVisibleRows(arrangement.rows.length)
   return (
     <div className="lane-bands" aria-hidden>
-      {arrangement.rows.map((row, index) => (
-        <div
-          key={index}
-          className={`lane-band${index % 2 ? ' is-odd' : ''}${row.kind === 'finished' ? ' is-finished' : ''}`}
-          style={{ top: y + (index - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
-        />
-      ))}
-      {dayBoundaries(compaction).map(({ x: graphX, key }) => (
-        <div key={key} className="day-line" style={{ left: x + graphX * zoom }} />
-      ))}
+      {arrangement.rows.slice(first, last + 1).map((row, offset) => {
+        const index = first + offset
+        return (
+          <div
+            key={index}
+            className={`lane-band${index % 2 ? ' is-odd' : ''}${row.kind === 'finished' ? ' is-finished' : ''}`}
+            style={{ top: y + (index - 0.5) * LANE_HEIGHT * zoom, height: LANE_HEIGHT * zoom }}
+          />
+        )
+      })}
+      {days
+        .filter(({ x: graphX }) => {
+          const left = x + graphX * zoom
+          return left >= 0 && left <= width
+        })
+        .map(({ x: graphX, key }) => (
+          <div key={key} className="day-line" style={{ left: x + graphX * zoom }} />
+        ))}
     </div>
   )
-}
+})
 
 /** Indentation per family-tree level in the top-down layout (capped so deep trees still fit). */
 const INDENT_PX = 12
@@ -368,10 +398,10 @@ const MAX_INDENT_LEVELS = 5
 /** Below this on-screen row height there's only room for the branch name, not its origin. */
 const MIN_ROW_HEIGHT_FOR_ORIGIN = 56
 
-/** The fixed branch column: one row per lane, following the graph as you pan and zoom
+/** The fixed branch column (only on-screen rows are drawn): one row per lane, following the graph as you pan and zoom
  *  vertically, but never moving sideways, so names never cover commits. Under each name, a
  *  second line says which branch it came from, with an arrow pointing to that branch's row. */
-function LaneLabels({
+const LaneLabels = memo(function LaneLabels({
   graph,
   arrangement,
   layout,
@@ -386,7 +416,10 @@ function LaneLabels({
 }) {
   const { y, zoom } = useViewport()
   const showOrigin = LANE_HEIGHT * zoom >= MIN_ROW_HEIGHT_FOR_ORIGIN
-  const rows = arrangement.rows.map((row, index) => ({ row, index }))
+  const [first, last] = useVisibleRows(arrangement.rows.length)
+  const rows = arrangement.rows
+    .slice(first, last + 1)
+    .map((row, offset) => ({ row, index: first + offset }))
   const visible = skipCrowded(rows, ({ index }) => y + index * LANE_HEIGHT * zoom, MIN_LABEL_GAP)
   return (
     <div className="lane-labels">
@@ -451,12 +484,17 @@ function LaneLabels({
       })}
     </div>
   )
-}
+})
 
 /** Day labels along the top, marking where each calendar day starts. */
-function DateRuler({ compaction }: { compaction: Compaction }) {
+const DateRuler = memo(function DateRuler({ days }: { days: DayBoundary[] }) {
   const { x, zoom } = useViewport()
-  const visible = skipCrowded(dayBoundaries(compaction), (day) => x + day.x * zoom, MIN_DAY_GAP)
+  const width = useStore((state) => state.width)
+  const onScreen = days.filter(({ x: graphX }) => {
+    const left = x + graphX * zoom
+    return left >= -200 && left <= width
+  })
+  const visible = skipCrowded(onScreen, (day) => x + day.x * zoom, MIN_DAY_GAP)
   return (
     <div className="date-ruler" aria-hidden style={{ height: RULER_HEIGHT }}>
       {visible.map(({ item: day, position }) => (
@@ -466,7 +504,7 @@ function DateRuler({ compaction }: { compaction: Compaction }) {
       ))}
     </div>
   )
-}
+})
 
 /** Keep items at least `gap` px apart on screen (in order), so labels never pile up when zoomed out. */
 function skipCrowded<T>(items: T[], positionOf: (item: T) => number, gap: number) {
@@ -481,7 +519,7 @@ function skipCrowded<T>(items: T[], positionOf: (item: T) => number, gap: number
 
 /** Where each calendar day starts along the (possibly compacted) time axis. A blob counts from
  *  its first commit, so days entirely inside a blob get no tick. */
-function dayBoundaries(compaction: Compaction): { x: number; key: string; label: string }[] {
+function dayBoundaries(compaction: Compaction): DayBoundary[] {
   const boundaries = []
   let previous = ''
   for (const [column, unit] of compaction.units.entries()) {
