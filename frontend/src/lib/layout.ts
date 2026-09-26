@@ -26,6 +26,21 @@ export interface CommitNodeData extends Record<string, unknown> {
 
 export interface GitEdgeData extends Record<string, unknown> {
   kind: EdgeKind
+  /** Set when the two ends are on rows that aren't next to each other: instead of a long line
+   *  crossing other branches' rows, draw a short labelled stub at each end. */
+  jump?: {
+    /** The other end is above (true) or below. Seen from the source commit. */
+    targetAbove: boolean
+    /** Branch shown at the source end ("→ dev") and at the target end ("← feature/x"). */
+    targetBranch: string
+    sourceBranch: string
+    /** Position among jumps leaving the same commit / entering the same commit in the same
+     *  direction, so their labels stack instead of overlapping. */
+    sourceSlot: number
+    targetSlot: number
+  }
+  onSelect?: () => void
+  selected?: boolean
 }
 
 export type CommitFlowNode = Node<CommitNodeData, 'commit'>
@@ -72,19 +87,86 @@ export function toFlowNodes(
   })
 }
 
-export function toFlowEdges(graph: Graph, selection: Selection | null): GitFlowEdge[] {
+export function toFlowEdges(
+  graph: Graph,
+  arrangement: Arrangement,
+  selection: Selection | null,
+  onSelectEdge: (selection: Selection) => void,
+): GitFlowEdge[] {
+  const laneOf = new Map(graph.nodes.map((node) => [node.sha, node.lane]))
+  const rowOfCommit = (sha: string) => arrangement.rowOf.get(laneOf.get(sha) ?? -1) ?? 0
+  const laneName = (sha: string) => graph.lanes[laneOf.get(sha) ?? -1]?.name ?? 'another branch'
+
+  const slots = new Map<string, number>()
+  const nextSlot = (key: string) => {
+    const slot = slots.get(key) ?? 0
+    slots.set(key, slot + 1)
+    return slot
+  }
+
   return graph.edges.map((edge) => {
     const selected = selection?.type === 'edge' && selection.id === edge.id
+    const sourceRow = rowOfCommit(edge.source)
+    const targetRow = rowOfCommit(edge.target)
+    const targetAbove = targetRow < sourceRow
+    const jump =
+      Math.abs(sourceRow - targetRow) > 1
+        ? {
+            targetAbove,
+            targetBranch: laneName(edge.target),
+            sourceBranch: laneName(edge.source),
+            sourceSlot: nextSlot(`out:${edge.source}:${targetAbove}`),
+            targetSlot: nextSlot(`in:${edge.target}:${targetAbove}`),
+          }
+        : undefined
     return {
       id: edge.id,
       type: 'git',
       source: edge.source,
       target: edge.target,
-      className: `edge-${edge.kind}${selected ? ' is-selected' : ''}`,
+      className: `edge-${edge.kind}${jump ? ' is-jump' : ''}${selected ? ' is-selected' : ''}`,
       zIndex: selected ? 1 : 0,
-      data: { kind: edge.kind },
+      data: {
+        kind: edge.kind,
+        jump,
+        selected,
+        onSelect: () =>
+          onSelectEdge({ type: 'edge', id: edge.id, source: edge.source, target: edge.target }),
+      },
     }
   })
+}
+
+/** Jump stub shape: a short run out of the commit, then a lean towards the other row. Incoming
+ *  stubs rise further than outgoing ones so labels of neighbouring commits don't collide. */
+export const JUMP_STUB = { run: 12, lean: 22, outRise: 14, inRise: 32, slotGap: 22 }
+
+/** SVG paths for the two stubs of a jump edge (see GitEdgeData.jump). */
+export function jumpStubPaths(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  targetAbove: boolean,
+  sourceSlot = 0,
+  targetSlot = 0,
+): { source: string; target: string; sourceTip: [number, number]; targetTip: [number, number] } {
+  const { run, lean, outRise, inRise, slotGap } = JUMP_STUB
+  const up = targetAbove ? -1 : 1
+  const sourceTip: [number, number] = [
+    sourceX + run + lean,
+    sourceY + up * (outRise + sourceSlot * slotGap),
+  ]
+  const targetTip: [number, number] = [
+    targetX - run - lean,
+    targetY - up * (inRise + targetSlot * slotGap),
+  ]
+  return {
+    source: `M ${sourceX},${sourceY} L ${sourceX + run},${sourceY} L ${sourceTip[0]},${sourceTip[1]}`,
+    target: `M ${targetTip[0]},${targetTip[1]} L ${targetX - run},${targetY} L ${targetX},${targetY}`,
+    sourceTip,
+    targetTip,
+  }
 }
 
 /** SVG path for an edge, drawn like a git graph rather than a generic curve:

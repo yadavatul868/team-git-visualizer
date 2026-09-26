@@ -67,6 +67,12 @@ their own parent. Under each branch name, a second line says where it came from,
 layout names are also indented by level). The branch priority list and then the default branch come
 first; branches whose starting point is older than the time window come last.
 
+**No lines across other branches.** A connection between two neighbouring rows is drawn as a
+line. When the two branches aren't next to each other, it becomes two short labelled stubs instead
+of a long line crossing other branches' rows. The branch tip gets a stub with a label such as
+**→ dev ↓**, and the merge commit gets one with **↑ feature/x →**. The arrows point towards the
+other branch, and clicking either label opens the connection's details.
+
 **Merged branches fold away.** A branch that's already merged (merged and deleted, or fully merged
 into another branch) is folded into one hatched "N merged branches" row at the top. Its commits
 are still shown there, smaller. Click that row or tick **Show merged** to expand them. These never

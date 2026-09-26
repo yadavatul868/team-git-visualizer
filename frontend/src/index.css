@@ -893,6 +893,31 @@ button.lane-label:hover {
 .react-flow__edge {
   cursor: pointer;
 }
+/* Jump edges: short stubs + labels instead of a line across other branches' rows */
+.jump-label {
+  position: absolute;
+  pointer-events: all;
+  padding: 1px 7px;
+  border: 1px solid var(--baseline);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font: 600 10px/1.5 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.jump-label:hover {
+  border-color: var(--brand);
+  color: var(--heading);
+}
+.jump-label.is-selected {
+  border-color: var(--accent);
+  color: var(--heading);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.jump-label:focus-visible {
+  outline: 2px solid var(--accent);
+}
 
 /* Minimap nodes coloured by author */
 .minimap-node {

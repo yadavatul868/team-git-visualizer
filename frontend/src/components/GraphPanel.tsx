@@ -88,7 +88,10 @@ function GraphCanvas({
     () => toFlowNodes(graph, arrangement, slots, selection, highlightedAuthor),
     [graph, arrangement, slots, selection, highlightedAuthor],
   )
-  const edges = useMemo(() => toFlowEdges(graph, selection), [graph, selection])
+  const edges = useMemo(
+    () => toFlowEdges(graph, arrangement, selection, onSelect),
+    [graph, arrangement, selection, onSelect],
+  )
 
   const fit = useCallback(
     (duration = 0) => {
