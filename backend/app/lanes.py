@@ -134,6 +134,8 @@ def lane_bases(
     base: dict[int, int] = {}
     branched_at: dict[int, int] = {}
     for index, lane in enumerate(lanes):
+        if not lane.shas:
+            continue  # a long-lived branch with no commits in the window
         oldest = min(lane.shas, key=x_of.__getitem__)
         parents = by_sha[oldest].parents
         if parents and lane_of.get(parents[0], index) != index:
@@ -193,32 +195,27 @@ def integration_lanes(
 def display_order(
     lanes: list[LaneAssignment],
     x_of: dict[str, int],
-    priority: list[str],
+    spine: list[int],
     base: dict[int, int],
     branched_at: dict[int, int],
     settled: set[int],
 ) -> tuple[list[int], dict[int, int]]:
-    """Lane indices top to bottom, arranged as a family tree, plus each nested lane's parent.
+    """Lane indices top to bottom, plus each nested lane's parent.
 
-    Each branch sits directly below the branch it was branched off from. Among siblings, the
-    most active sit closest to their parent: branches still in progress first, `settled` ones
-    (merged back) after them, each group most recently active first. Branches of branches nest
-    under their own parent. Roots, in order: the user's priority branches, the default branch,
-    then branches whose base is outside the time window (again active first).
+    The `spine` (long-lived branches, in promotion order) comes first as one block, so those
+    branches always sit together. Then each spine branch's family: branches made from it, with
+    the most active closest (in progress before `settled` merged-back ones, each group most
+    recently active first); branches of branches nest under their own parent. Branches with no
+    known base come last (again active first).
     """
-    last_x = {index: max(x_of[sha] for sha in lane.shas) for index, lane in enumerate(lanes)}
+    last_x = {
+        index: max((x_of[sha] for sha in lane.shas), default=-1) for index, lane in enumerate(lanes)
+    }
 
     def activity(index: int) -> tuple[bool, int, int]:
         return (index in settled, -last_x[index], -branched_at.get(index, -1))
 
-    pinned = [
-        index
-        for name in dict.fromkeys(priority)
-        for index, lane in enumerate(lanes)
-        if lane.name == name and lane.kind in ("default", "branch")
-    ]
-    defaults = [i for i, lane in enumerate(lanes) if lane.kind == "default" and i not in pinned]
-    fixed_roots = pinned + defaults
+    fixed_roots = list(dict.fromkeys(spine))
 
     children: dict[int, list[int]] = {}
     for index, parent_index in base.items():
@@ -231,10 +228,11 @@ def display_order(
     )
 
     tree_parent = {i: p for i, p in base.items() if i not in fixed_roots}
-    order: list[int] = []
-    placed: set[int] = set()
-    # Iterative depth-first walk (repos can have hundreds of lanes); every lane is placed once.
-    for root in [*fixed_roots, *other_roots, *range(len(lanes))]:
+    order: list[int] = list(fixed_roots)  # the spine, as one block
+    placed: set[int] = set(fixed_roots)
+    # Then each family, depth first (iteratively; repos can have hundreds of lanes).
+    family_roots = [child for root in fixed_roots for child in children.get(root, [])]
+    for root in [*family_roots, *other_roots, *range(len(lanes))]:
         stack = [root]
         while stack:
             index = stack.pop()

@@ -10,6 +10,7 @@ from pathlib import Path
 from app.git_runner import GitError, run_git
 from app.identity import IdentityStore, refresh_github_identities
 from app.models import BranchInfo, RepoSnapshot
+from app.promotion import refresh_pull_requests
 
 FETCH_TIMEOUT_S = 600.0
 _OWNER = r"[A-Za-z0-9][A-Za-z0-9-]{0,38}"
@@ -187,6 +188,7 @@ def sync_repo(
                 ) from exc
             raise
         refresh_github_identities(path, ref.owner, ref.name, token, identities)
+        refresh_pull_requests(path, ref.owner, ref.name, token)
         return read_snapshot(ref, path)
 
 

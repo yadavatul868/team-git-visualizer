@@ -16,9 +16,34 @@ export interface Arrangement {
   rowOf: Map<number, number>
 }
 
-export function arrangeRows(graph: Graph, layout: LaneLayout, showFinished: boolean): Arrangement {
-  const hidden = showFinished ? [] : graph.lanes.filter((lane) => lane.finished)
-  const visible = graph.lanes.filter((lane) => showFinished || !lane.finished)
+/**
+ * A lane for a branch that no longer exists. In the graph these are always merged-then-deleted:
+ * a branch deleted without being merged has no reachable commits, so it's never fetched at all.
+ * Hiding them therefore loses no work; the merge commit on the receiving branch stays.
+ */
+export const isDeletedLane = (lane: Lane): boolean =>
+  lane.kind === 'deleted' || lane.kind === 'unlabelled'
+
+/** The graph without deleted branches' commits and lines. Lanes keep their ids (and stay in the
+ *  list so lookups by id still work); arrangeRows leaves them out. */
+export function withoutDeleted(graph: Graph): Graph {
+  const deleted = new Set(graph.lanes.filter(isDeletedLane).map((lane) => lane.id))
+  if (deleted.size === 0) return graph
+  const nodes = graph.nodes.filter((node) => !deleted.has(node.lane))
+  const kept = new Set(nodes.map((node) => node.sha))
+  const edges = graph.edges.filter((edge) => kept.has(edge.source) && kept.has(edge.target))
+  return { ...graph, nodes, edges }
+}
+
+export function arrangeRows(
+  graph: Graph,
+  layout: LaneLayout,
+  showFinished: boolean,
+  showDeleted: boolean,
+): Arrangement {
+  const lanes = graph.lanes.filter((lane) => showDeleted || !isDeletedLane(lane))
+  const hidden = showFinished ? [] : lanes.filter((lane) => lane.finished)
+  const visible = lanes.filter((lane) => showFinished || !lane.finished)
   const ordered = layout === 'centered' ? centered(visible) : visible
 
   const rows: Row[] = ordered.map((lane) => ({ kind: 'lane', lane }))
@@ -34,9 +59,15 @@ export function arrangeRows(graph: Graph, layout: LaneLayout, showFinished: bool
 }
 
 /**
- * The default branch in the middle, its branch families alternating above and below it (most
- * recent nearest). Families above are mirrored, so each branch stays next to the
- * branch it came from and sub-branches sit further out.
+ * Centered on the default branch.
+ *
+ * With several long-lived branches (a spine such as main, stage, dev) they stay together as one
+ * block, in promotion order, with the default branch's own families above it and the other
+ * spine branches' families below (the last spine branch's nearest). With only the default branch
+ * long-lived, its families alternate above and below it instead.
+ *
+ * Either way the most active family sits nearest, and families above are mirrored so each branch
+ * stays next to the branch it came from, with sub-branches further out.
  */
 function centered(lanes: Lane[]): Lane[] {
   const visibleIds = new Set(lanes.map((lane) => lane.id))
@@ -54,6 +85,19 @@ function centered(lanes: Lane[]): Lane[] {
     ...(children.get(lane.id) ?? []).flatMap((child) => family(child)),
   ]
 
+  const mirrored = (blocks: Lane[][]) => [...blocks].reverse().flatMap((block) => [...block].reverse())
+
+  const spine = lanes.filter((lane) => lane.long_lived)
+  if (spine.length >= 2) {
+    const inSpine = new Set(spine.map((lane) => lane.id))
+    const familiesOf = (lane: Lane) =>
+      (children.get(lane.id) ?? []).filter((child) => !inSpine.has(child.id)).map(family)
+    const [head, ...rest] = spine
+    const below = [...rest].reverse().flatMap(familiesOf)
+    const loose = roots.filter((root) => !inSpine.has(root.id)).map(family)
+    return [...mirrored(familiesOf(head)), ...spine, ...below.flat(), ...loose.flat()]
+  }
+
   const center = lanes.find((lane) => lane.kind === 'default') ?? roots[0]
   if (!center) return lanes
   const blocks = [
@@ -65,8 +109,7 @@ function centered(lanes: Lane[]): Lane[] {
   const below: Lane[][] = []
   blocks.forEach((block, index) => (index % 2 === 0 ? above : below).push(block))
   // Nearest-to-centre block first in `above`, so reverse the stacking and mirror each block.
-  const top = [...above].reverse().flatMap((block) => [...block].reverse())
-  return [...top, center, ...below.flat()]
+  return [...mirrored(above), center, ...below.flat()]
 }
 
 export const savedLayout = (): LaneLayout =>
@@ -74,3 +117,5 @@ export const savedLayout = (): LaneLayout =>
 export const saveLayout = (layout: LaneLayout) => save('tgv:layout', layout)
 export const savedShowFinished = (): boolean => load<boolean>('tgv:show-finished', false) === true
 export const saveShowFinished = (show: boolean) => save('tgv:show-finished', show)
+export const savedShowDeleted = (): boolean => load<boolean>('tgv:show-deleted', false) === true
+export const saveShowDeleted = (show: boolean) => save('tgv:show-deleted', show)
