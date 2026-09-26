@@ -81,6 +81,9 @@ class Lane(BaseModel):
     name: str
     kind: LaneKind
     commit_count: int
+    parent: int | None  # lane this branch was branched off from (family tree), if shown nested
+    depth: int  # nesting level in the family tree (0 = top level)
+    finished: bool  # merged and done; the UI can fold these into one row
 
 
 class GraphNode(BaseModel):

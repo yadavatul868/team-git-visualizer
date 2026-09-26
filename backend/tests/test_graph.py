@@ -160,9 +160,43 @@ def test_branches_sit_under_their_parent_most_recent_first() -> None:
     lanes, lane_of = assign_lanes(commits, tips, "main", [])
     x_of = {c.sha: len(commits) - 1 - rank for rank, c in enumerate(commits)}
     by_sha = {c.sha: c for c in commits}
-    order = display_order(lanes, x_of, [], lane_of, by_sha)
+    order, tree_parent = display_order(lanes, x_of, [], lane_of, by_sha)
     assert [lanes[i].name for i in order] == ["main", "dev", "feat-b", "feat-a", "sub-a"]
+    names = {i: lane.name for i, lane in enumerate(lanes)}
+    assert {names[c]: names[p] for c, p in tree_parent.items()} == {
+        "dev": "main",
+        "feat-b": "dev",
+        "feat-a": "dev",
+        "sub-a": "feat-a",
+    }
 
     # A priority branch stays pinned at the top, with its own family below it.
-    order = display_order(lanes, x_of, ["feat-a"], lane_of, by_sha)
+    order, _ = display_order(lanes, x_of, ["feat-a"], lane_of, by_sha)
     assert [lanes[i].name for i in order] == ["feat-a", "sub-a", "main", "dev", "feat-b"]
+
+
+def test_lane_tree_depth_and_finished(graph: Graph) -> None:
+    lanes = {lane.name: lane for lane in graph.lanes}
+    parent_name = {
+        lane.name: graph.lanes[lane.parent].name for lane in graph.lanes if lane.parent is not None
+    }
+    assert parent_name == {
+        "stage": "main",
+        "dev": "main",
+        "feat-old": "dev",
+        "feat/search": "dev",
+        "feat/login": "dev",
+    }
+    assert {name: lane.depth for name, lane in lanes.items()} == {
+        "main": 0, "stage": 1, "dev": 1, "feat-old": 2, "feat/search": 2, "feat/login": 2
+    }  # fmt: skip
+    # Finished: merged-and-deleted feat-old, and feat/login (merged into dev, still exists).
+    # Not finished: main (default), stage and dev (they receive merges), and feat/search
+    # (never merged, only synced from dev).
+    assert {name for name, lane in lanes.items() if lane.finished} == {"feat-old", "feat/login"}
+
+
+def test_priority_branches_are_never_finished(cached_repo: Path, people: PeopleIndex) -> None:
+    graph = build_graph(cached_repo, "acme/demo", None, 2000, ["feat/login"], people)
+    lanes = {lane.name: lane for lane in graph.lanes}
+    assert lanes["feat/login"].finished is False
