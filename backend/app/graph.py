@@ -2,9 +2,10 @@
 
 from pathlib import Path
 
-from app.gitlog import RawCommit, read_log
+from app.gitlog import RawCommit, parse_merge_message, read_log
 from app.identity import PeopleIndex
 from app.lanes import (
+    LaneAssignment,
     assign_lanes,
     display_order,
     finished_lanes,
@@ -20,8 +21,51 @@ from app.models import (
     GraphNode,
     GraphSummary,
     Lane,
+    LaneKind,
+)
+from app.promotion import (
+    Flow,
+    base_branch,
+    chain_owners,
+    first_parents,
+    load_pull_request_flows,
+    message_flows,
+    spine_order,
 )
 from app.sync import list_branches, read_default_branch, read_fetched_at
+
+_history_cache: dict[tuple[Path, str | None], tuple[dict[str, str], dict[str, Flow]]] = {}
+
+
+def load_history(path: Path, fetched_at: str | None) -> tuple[dict[str, str], dict[str, Flow]]:
+    """Full-history first parents and merge-message flows, cached until the next sync."""
+    key = (path, fetched_at)
+    if key not in _history_cache:
+        for stale in [k for k in _history_cache if k[0] == path]:
+            del _history_cache[stale]
+        _history_cache[key] = (first_parents(path), message_flows(path))
+    return _history_cache[key]
+
+
+def window_flows(
+    commits: list[RawCommit], lanes: list[LaneAssignment], lane_index: dict[str, int]
+) -> dict[str, Flow]:
+    """Merges inside the window: the target is the lane the merge commit sits on."""
+    flows: dict[str, Flow] = {}
+    for commit in commits:
+        if not commit.is_merge or commit.sha not in lane_index:
+            continue
+        target = lanes[lane_index[commit.sha]]
+        if target.kind not in ("default", "branch"):
+            continue
+        merged_name, _ = parse_merge_message(commit.subject)
+        for parent in commit.parents[1:]:
+            source = merged_name or (
+                lanes[lane_index[parent]].name if parent in lane_index else None
+            )
+            if source:
+                flows[commit.sha] = Flow(source, target.name)
+    return flows
 
 
 def author_stats(commits: list[RawCommit], people: PeopleIndex) -> list[AuthorStat]:
@@ -81,23 +125,56 @@ def build_graph(
     commits = commits[:max_commits]
 
     tips = {branch.name: branch.tip_sha for branch in branches}
-    assignments, lane_index = assign_lanes(commits, tips, default_branch, priority)
     x_of = {commit.sha: len(commits) - 1 - rank for rank, commit in enumerate(commits)}
     by_sha = {commit.sha: commit for commit in commits}
+
+    # Long-lived branches (the spine), from merge evidence across history (see promotion.py).
+    # A first lane pass gives the merges inside the window; then the spine claims history first.
+    parents_full, history_flows = load_history(path, read_fetched_at(path))
+    first_pass, first_index = assign_lanes(commits, tips, default_branch, priority)
+    flows = {
+        **history_flows,
+        **window_flows(commits, first_pass, first_index),
+        **load_pull_request_flows(path),
+    }
+    spine_names = spine_order(list(flows.values()), set(tips), default_branch, priority)
+    assignments, lane_index = assign_lanes(commits, tips, default_branch, spine_names)
+    # Spine branches always get a lane, even with no commits in the window.
+    named = {lane.name for lane in assignments if lane.kind in ("default", "branch")}
+    for name in spine_names:
+        if name not in named:
+            kind: LaneKind = "default" if name == default_branch else "branch"
+            assignments.append(LaneAssignment(name=name, kind=kind))
+    spine = [
+        index
+        for name in spine_names
+        for index, lane in enumerate(assignments)
+        if lane.name == name and lane.kind in ("default", "branch")
+    ]
+
     base, branched_at = lane_bases(assignments, x_of, lane_index, by_sha)
+    # Branches that started before the window: follow full history back to the spine branch
+    # they came from.
+    owners = chain_owners(spine_names, tips, parents_full)
+    spine_index = {assignments[index].name: index for index in spine}
+    for index, lane in enumerate(assignments):
+        if index in base or index in spine or not lane.shas:
+            continue
+        oldest = min(lane.shas, key=x_of.__getitem__)
+        start = parents_full.get(oldest)
+        origin = base_branch(start, parents_full, owners) if start else None
+        if origin in spine_index:
+            base[index] = spine_index[origin]
+
     merged = merged_lanes(assignments, tips, commits)
     integrating = integration_lanes(assignments, base, commits, lane_index)
     # Merged-back branches move away from their parent; active work stays closest.
     order, tree_parent = display_order(
-        assignments, x_of, priority, base, branched_at, settled=merged - integrating
+        assignments, x_of, spine, base, branched_at, settled=merged - integrating
     )
     lane_id = {index: position for position, index in enumerate(order)}
-    protected = {
-        index
-        for index, lane in enumerate(assignments)
-        if lane.kind == "default" or lane.name in priority
-    }
-    finished = finished_lanes(order, tree_parent, merged, integrating, protected)
+    finished = finished_lanes(order, tree_parent, merged, integrating, protected=set(spine))
+    last_commit_at = {branch.name: branch.last_commit_at for branch in branches}
 
     def depth(index: int) -> int:
         level = 0
@@ -140,6 +217,12 @@ def build_graph(
             parent=lane_id[tree_parent[index]] if index in tree_parent else None,
             depth=depth(index),
             finished=index in finished,
+            long_lived=index in spine,
+            last_commit_at=(
+                last_commit_at.get(assignments[index].name)
+                if assignments[index].kind in ("default", "branch")
+                else None
+            ),
         )
         for index in order
     ]

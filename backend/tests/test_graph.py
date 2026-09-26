@@ -157,9 +157,12 @@ def test_branches_sit_under_their_parent_most_recent_first() -> None:
     x_of = {c.sha: len(commits) - 1 - rank for rank, c in enumerate(commits)}
     by_sha = {c.sha: c for c in commits}
     base, branched_at = lane_bases(lanes, x_of, lane_of, by_sha)
-    order, tree_parent = display_order(lanes, x_of, [], base, branched_at, settled=set())
-    assert [lanes[i].name for i in order] == ["main", "dev", "feat-b", "feat-a", "sub-a"]
     names = {i: lane.name for i, lane in enumerate(lanes)}
+    index_of = {name: i for i, name in names.items()}
+    order, tree_parent = display_order(
+        lanes, x_of, [index_of["main"]], base, branched_at, settled=set()
+    )
+    assert [lanes[i].name for i in order] == ["main", "dev", "feat-b", "feat-a", "sub-a"]
     assert {names[c]: names[p] for c, p in tree_parent.items()} == {
         "dev": "main",
         "feat-b": "dev",
@@ -168,8 +171,11 @@ def test_branches_sit_under_their_parent_most_recent_first() -> None:
     }
 
     # A priority branch stays pinned at the top, with its own family below it.
-    order, _ = display_order(lanes, x_of, ["feat-a"], base, branched_at, settled=set())
-    assert [lanes[i].name for i in order] == ["feat-a", "sub-a", "main", "dev", "feat-b"]
+    order, _ = display_order(
+        lanes, x_of, [index_of["feat-a"], index_of["main"]], base, branched_at, settled=set()
+    )
+    # (spine block first, then each spine branch's family)
+    assert [lanes[i].name for i in order] == ["feat-a", "main", "sub-a", "dev", "feat-b"]
 
 
 def test_lane_tree_depth_and_finished(graph: Graph) -> None:
@@ -177,20 +183,31 @@ def test_lane_tree_depth_and_finished(graph: Graph) -> None:
     parent_name = {
         lane.name: graph.lanes[lane.parent].name for lane in graph.lanes if lane.parent is not None
     }
-    assert parent_name == {
-        "stage": "main",
-        "dev": "main",
-        "feat-old": "dev",
-        "feat/search": "dev",
-        "feat/login": "dev",
-    }
+    # main, stage and dev are the spine (roots); feature branches hang off dev.
+    assert parent_name == {"feat-old": "dev", "feat/search": "dev", "feat/login": "dev"}
     assert {name: lane.depth for name, lane in lanes.items()} == {
-        "main": 0, "stage": 1, "dev": 1, "feat-old": 2, "feat/search": 2, "feat/login": 2
+        "main": 0, "stage": 0, "dev": 0, "feat-old": 1, "feat/search": 1, "feat/login": 1
     }  # fmt: skip
     # Finished: merged-and-deleted feat-old, and feat/login (merged into dev, still exists).
-    # Not finished: main (default), stage and dev (they receive merges), and feat/search
-    # (never merged, only synced from dev).
+    # Not finished: the spine, and feat/search (never merged, only synced from dev).
     assert {name for name, lane in lanes.items() if lane.finished} == {"feat-old", "feat/login"}
+
+
+def test_spine_is_detected_from_merges(graph: Graph) -> None:
+    assert [lane.name for lane in graph.lanes if lane.long_lived] == ["main", "stage", "dev"]
+    assert all(lane.last_commit_at for lane in graph.lanes if lane.long_lived)
+
+
+def test_spine_branch_without_commits_in_the_window_still_gets_a_lane(
+    cached_repo: Path, people: PeopleIndex
+) -> None:
+    # Only the newest 3 commits: dev has none of them, and feat/search's base is outside.
+    graph = build_graph(cached_repo, "acme/demo", None, 3, [], people)
+    lanes = {lane.name: lane for lane in graph.lanes}
+    assert lanes["dev"].long_lived and lanes["dev"].commit_count == 0
+    assert [lane.name for lane in graph.lanes][:3] == ["main", "stage", "dev"]
+    # feat/search started before the window; full history says it came from dev.
+    assert graph.lanes[lanes["feat/search"].parent].name == "dev"
 
 
 def test_priority_branches_are_never_finished(cached_repo: Path, people: PeopleIndex) -> None:
@@ -221,7 +238,8 @@ def test_merged_back_branches_move_away_from_their_parent() -> None:
     names = [lane.name for lane in lanes]
     done = names.index("done")
 
-    by_recency, _ = display_order(lanes, x_of, [], base, branched_at, settled=set())
+    main = names.index("main")
+    by_recency, _ = display_order(lanes, x_of, [main], base, branched_at, settled=set())
     assert [names[i] for i in by_recency] == ["main", "done", "open"]
-    by_activity, _ = display_order(lanes, x_of, [], base, branched_at, settled={done})
+    by_activity, _ = display_order(lanes, x_of, [main], base, branched_at, settled={done})
     assert [names[i] for i in by_activity] == ["main", "open", "done"]

@@ -84,6 +84,8 @@ class Lane(BaseModel):
     parent: int | None  # lane this branch was branched off from (family tree), if shown nested
     depth: int  # nesting level in the family tree (0 = top level)
     finished: bool  # merged and done; the UI can fold these into one row
+    long_lived: bool  # part of the spine (e.g. main, stage, dev); these stay together
+    last_commit_at: str | None  # the branch's latest commit, even if outside the window
 
 
 class GraphNode(BaseModel):
