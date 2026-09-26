@@ -1,0 +1,22 @@
+# Secrets
+.env
+
+# Local repo cache
+.cache/
+
+# Python
+.venv/
+__pycache__/
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+
+# Local development notes (plans, lessons); kept on this machine only
+tasks/
+
+# Your repository suggestions (may list private/company repos); see repos.example.json
+repos.json
