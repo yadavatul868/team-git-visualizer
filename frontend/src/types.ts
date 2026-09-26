@@ -70,6 +70,10 @@ export interface Lane {
   depth: number
   /** Merged and done; can be folded into one row. */
   finished: boolean
+  /** Part of the spine of long-lived branches (e.g. main, stage, dev), which stay together. */
+  long_lived: boolean
+  /** The branch's latest commit, even if it's outside the time window. */
+  last_commit_at: string | null
 }
 
 export interface GraphNode {

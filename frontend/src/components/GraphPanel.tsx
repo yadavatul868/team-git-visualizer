@@ -473,11 +473,21 @@ const LaneLabels = memo(function LaneLabels({
                 <span className="lane-kind">{LANE_KIND_LABEL[lane.kind]}</span>
               )}
               {lane.finished && lane.kind === 'branch' && <span className="lane-kind">merged</span>}
+              {lane.long_lived && lane.kind !== 'default' && (
+                <span className="lane-kind" title="Long-lived branch: kept together with the default branch">
+                  long-lived
+                </span>
+              )}
             </span>
-            {parent && showOrigin && (
-              <span className="lane-origin">
-                <span aria-hidden>{arrow}</span> from {parent.name}
-              </span>
+            {showOrigin && lane.commit_count === 0 && lane.last_commit_at ? (
+              <span className="lane-origin">no commits in window · last {formatDay(lane.last_commit_at)}</span>
+            ) : (
+              parent &&
+              showOrigin && (
+                <span className="lane-origin">
+                  <span aria-hidden>{arrow}</span> from {parent.name}
+                </span>
+              )
             )}
           </button>
         )

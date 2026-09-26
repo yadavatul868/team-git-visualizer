@@ -11,6 +11,8 @@ const lane = (id: number, name: string, kind: Lane['kind'], extra: Partial<Lane>
   parent: id === 0 ? null : 0,
   depth: id === 0 ? 0 : 1,
   finished: false,
+  long_lived: kind === 'default',
+  last_commit_at: null,
   ...extra,
 })
 
@@ -60,5 +62,43 @@ describe('deleted branches', () => {
       'feat/live',
       'feat/merged',
     ])
+  })
+})
+
+describe('centered layout with a spine', () => {
+  const spine = {
+    lanes: [
+      lane(0, 'main', 'default'),
+      lane(1, 'stage', 'branch', { long_lived: true, parent: null, depth: 0 }),
+      lane(2, 'dev', 'branch', { long_lived: true, parent: null, depth: 0 }),
+      lane(3, 'hotfix', 'branch', { parent: 0 }),
+      lane(4, 'feat/a', 'branch', { parent: 2 }),
+      lane(5, 'feat/b', 'branch', { parent: 2 }),
+      lane(6, 'feat/a-sub', 'branch', { parent: 4, depth: 2 }),
+    ],
+    nodes: [],
+    edges: [],
+  } as unknown as Graph
+
+  it("keeps main, stage, dev together with each one's families on the outside", () => {
+    const result = arrangeRows(spine, 'centered', true, true)
+    expect(laneNames(result.rows)).toEqual([
+      'hotfix', // main's family, above
+      'main',
+      'stage',
+      'dev',
+      'feat/a', // dev's families below, nearest first
+      'feat/a-sub',
+      'feat/b',
+    ])
+    expect(result.anchorRow).toBe(1) // centred on main
+  })
+
+  it('still alternates around the default branch when it is the only long-lived one', () => {
+    const trunk = {
+      ...spine,
+      lanes: [lane(0, 'main', 'default'), lane(1, 'a', 'branch'), lane(2, 'b', 'branch')],
+    } as unknown as Graph
+    expect(laneNames(arrangeRows(trunk, 'centered', true, true).rows)).toEqual(['a', 'main', 'b'])
   })
 })

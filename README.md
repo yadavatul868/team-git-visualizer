@@ -61,6 +61,18 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 25+, git.
 
 ## How branches are ordered
 
+**Long-lived branches stay together.** The app works out which branches are long-lived, such as
+`main`, `stage` and `dev`, from how work flows between branches. It reads merged pull requests
+from GitHub and merge messages across all history, with no branch names hard-coded.
+- **Long-lived:** your default branch and branch priority list, plus any branch that merges into
+  one of them while receiving merges from another branch.
+- **Order:** promotion order, e.g. `main`, `stage`, `dev`. They always sit together, marked
+  *long-lived*, even when their last commit is older than the window (then the lane says
+  "no commits in window · last 12 Jun").
+- **Centered layout:** `main`'s own branches go above it, and `dev`'s branches below `dev`.
+- **Not long-lived:** feature branches that only sync with their base, and big feature branches
+  that collect stacked PRs but never merge onward.
+
 The branch column is arranged like a family tree. Each branch sits next to the branch it was
 branched off from. **The most active branches sit closest:** work still in progress comes first,
 and branches already merged back move further away, each group ordered by most recent activity.
